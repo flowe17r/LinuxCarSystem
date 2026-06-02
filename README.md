@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Smart_in-car_entertainment
 
 基于 **Qt5** 的嵌入式 Linux 车载娱乐系统，面向 **1024×600** 触摸屏开发板（已在 **100ASK IMX6ULL Pro** 上验证）。主界面提供天气、音乐、视频、环境监控与 GPS 地图五个功能模块。
@@ -219,3 +220,7 @@ cd /root
 ## 许可证
 
 本项目为开源车载娱乐系统示例代码，具体许可证以仓库说明为准。第三方 API（易客天气、百度地图）请遵守各自服务条款。
+=======
+# LinuxCarSystem
+Qt5-based embedded Linux in-car entertainment system with weather, music, video, environment monitoring and GPS map modules.
+>>>>>>> 5cb771f424edc42b6be864640785459e59cecd9a
