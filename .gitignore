@@ -1,0 +1,45 @@
+# Qt 编译产物
+build/
+*.o
+*.obj
+*.moc
+*.moc.cpp
+moc_*.cpp
+*.ui~
+*.autosave
+
+# 可执行文件
+Smart_in-car_entertainment
+*.exe
+*.out
+*.app
+
+# 内核驱动编译产物
+*.ko
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+Module.symvers
+modules.order
+*.o.cmd
+*.ko.cmd
+.tmp_versions/
+
+# Qt 临时文件
+*.autosave
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.autosave
+.DS_Store
+Thumbs.db
+
+# 视频和音乐（太大，不上传）
+Videos/*.mp4
+Videos/*.mkv
+Videos/*.avi
+myMusic/*.mp3
+myMusic/*.wav
+myMusic/*.lrc

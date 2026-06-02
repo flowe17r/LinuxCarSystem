@@ -1,0 +1,18 @@
+CC = gcc
+TARGET = dht11_test
+SOURCE = dht11_test.c
+
+all: $(TARGET)
+
+$(TARGET): $(SOURCE)
+	$(CC) -o $(TARGET) $(SOURCE)
+
+clean:
+	rm -f $(TARGET)
+
+install: $(TARGET)
+	@echo "Copy $(TARGET) to target board:"
+	@echo "  scp $(TARGET) root@<board_ip>:/root/"
+	@echo "  chmod +x /root/$(TARGET)"
+
+.PHONY: all clean install
