@@ -13,7 +13,6 @@ Hardware::Hardware(QWidget *parent)
     buzzer = new Buzzer(this);
     led = new Led(this);
     mq135 = new Mq135(this);
-
 }
 
 Hardware::~Hardware()
@@ -24,9 +23,18 @@ Hardware::~Hardware()
 void Hardware::dht11_handler()
 {
     char data[4];
-    dht11->dht11_read(data);
-    ui->Temp_label->setNum(data[2]);
-    ui->Humi_label->setNum(data[0]);
+    int ret = dht11->dht11_read(data);
+    
+    if (ret == 4) {
+        // 显示温度和湿度（保留1位小数）
+        float temperature = data[2] + data[3] / 10.0f;
+        float humidity = data[0] + data[1] / 10.0f;
+        
+        ui->Temp_label->setText(QString::number(temperature, 'f', 1) + "°C");
+        ui->Humi_label->setText(QString::number(humidity, 'f', 1) + "%");
+    } else {
+        qDebug() << "DHT11 read error:" << ret;
+    }
 }
 
 
@@ -110,10 +118,11 @@ void Hardware::mq135_handler()
 
 void Hardware::hardware_working()
 {
-    connect(dht11,&DHT11::readyto_read_dht11data,this,&Hardware::dht11_handler);
-    connect(sr04,&Sr04::readyto_read_sr04data,this,&Hardware::sr04_handler);
-    connect(mq135,&Mq135::readyto_read_mq135data,this,&Hardware::mq135_handler);
-
+    dht11->start();
+    connect(dht11, &DHT11::readyto_read_dht11data, this, &Hardware::dht11_handler, Qt::UniqueConnection);
+    connect(sr04, &Sr04::readyto_read_sr04data, this, &Hardware::sr04_handler, Qt::UniqueConnection);
+    connect(mq135, &Mq135::readyto_read_mq135data, this, &Hardware::mq135_handler, Qt::UniqueConnection);
+    dht11_handler();  // 进入页面立即读一次
 }
 
 

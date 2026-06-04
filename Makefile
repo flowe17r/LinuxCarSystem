@@ -1,7 +1,6 @@
 obj-m += dht11_drv.o
 
-# 百问 Buildroot 内核路径；若编译失败可改为 Linux-4.9.88 源码路径
-KDIR ?= /home/book/100ask_imx6ull-sdk/Buildroot_2020.02.x/output/build/linux-custom
+KDIR ?= /home/book/100ask_imx6ull-sdk/Linux-4.9.88
 PWD  := $(shell pwd)
 
 all:

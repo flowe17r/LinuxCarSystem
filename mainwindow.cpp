@@ -26,12 +26,10 @@ MainWindow::MainWindow(QWidget *parent)
     audio = new Audio;
     hardware = new Hardware;
     map = new Map;
-    // 将工作对象移入线程中
+    // 将工作对象移入线程中（Hardware / Map 含界面，保留在主线程）
     weather->moveToThread(t1);
     player->moveToThread(t2);
     audio->moveToThread(t3);
-    hardware->moveToThread(t4);
-    map->moveToThread(t5);
     // 当信号被触发执行相应的工作函数
     connect(this,&MainWindow::weather_starting,weather,&Weather::weather_working);
     connect(this,&MainWindow::player_starting,player,&Player::player_working);
@@ -59,13 +57,11 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(ui->pushButton_4,&QPushButton::clicked,this,[=](){
        emit hardware_starting();
-       t4->start();
        hardware->show();
        this->hide();
     });
     connect(ui->pushButton_5,&QPushButton::clicked,this,[=](){
        emit map_starting();
-       t5->start();
        map->show();
        this->hide();
     });
@@ -88,12 +84,10 @@ MainWindow::MainWindow(QWidget *parent)
         this->show();
     });
     connect(this->hardware,&Hardware::back1,[=](){
-        t4->terminate();
         this->hardware->hide();
         this->show();
     });
     connect(this->map,&Map::backout,[=](){
-        t5->terminate();
         this->map->hide();
         this->show();
     });

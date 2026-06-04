@@ -29,8 +29,8 @@ void Map::initUi()
     pMovie->start();
     this->setFixedSize(1024,600);
     m_logoLabel.setObjectName("logoLabel");
-    m_logoLabel.setText(QString("µ±Ç°Õ¹Ê¾¶¨Î»×ø±ê£º[") +m_location + "]");
-    m_back = new QPushButton(tr("·µ»Ø"),this);
+    m_logoLabel.setText(QString("å½“å‰å±•ç¤ºå®šä½åæ ‡ï¼š[") +m_location + "]");
+    m_back = new QPushButton(tr("è¿”å›"),this);
     m_iconLabel.setMovie(pMovie);
     m_iconLabel.setAlignment(Qt::AlignCenter);
     m_logoLabel.setAlignment(Qt::AlignRight);
@@ -56,90 +56,90 @@ void Map::initCtrl()
     requestMapImage(m_location);
 }
 
-// ´®¿Ú³õÊ¼»¯
+// ä¸²å£åˆå§‹åŒ–
 void Map::initSerialPort()
 {
-    // ÉèÖÃ´®¿ÚÃû³Æ (UART6)
-    m_port.setPortName("ttymxc6");
-    // ÒÔ¶ÁĞ´·½Ê½´ò¿ª´®¿ÚÉè±¸
+    // è®¾ç½®ä¸²å£åç§° (UART6)
+    m_port.setPortName("ttymxc5");
+    // ä»¥è¯»å†™æ–¹å¼æ‰“å¼€ä¸²å£è®¾å¤‡
     if(!m_port.open(QIODevice::ReadWrite)) {
-        SimpleMessageBox::infomationMessageBox("Î´¼ì²âµ½Éè±¸£¬ÇëÖØÊÔ");
-        m_logoLabel.setText(QString("Î´¼ì²âµ½GPSÉè±¸£¬µ±Ç°Õ¹Ê¾¶¨Î»×ø±ê£º[") +m_location + "]");
+        SimpleMessageBox::infomationMessageBox("æœªæ£€æµ‹åˆ°è®¾å¤‡ï¼Œè¯·é‡è¯•");
+        m_logoLabel.setText(QString("æœªæ£€æµ‹åˆ°GPSè®¾å¤‡ï¼Œå½“å‰å±•ç¤ºå®šä½åæ ‡ï¼š[") +m_location + "]");
         return;
     }
-    // ÉèÖÃ²¨ÌØÂÊÎª9600
+    // è®¾ç½®æ³¢ç‰¹ç‡ä¸º9600
     m_port.setBaudRate(QSerialPort::Baud9600, QSerialPort::AllDirections);
-    // ÉèÖÃÊı¾İÎ»Îª8Î»
+    // è®¾ç½®æ•°æ®ä½ä¸º8ä½
     m_port.setDataBits(QSerialPort::Data8);
-    // ÉèÖÃÁ÷¿ØÖÆÎªÎŞÁ÷¿ØÖÆÄ£Ê½
+    // è®¾ç½®æµæ§åˆ¶ä¸ºæ— æµæ§åˆ¶æ¨¡å¼
     m_port.setFlowControl(QSerialPort::NoFlowControl);
-    // ÉèÖÃÎªÎŞĞ£ÑéÎ»
+    // è®¾ç½®ä¸ºæ— æ ¡éªŒä½
     m_port.setParity(QSerialPort::NoParity);
-    // ÉèÖÃÍ£Ö¹Î»Îª1Î»
+    // è®¾ç½®åœæ­¢ä½ä¸º1ä½
     m_port.setStopBits(QSerialPort::OneStop);
-    // readyReadĞÅºÅÊÇµ±´®¿Ú½ÓÊÕµ½ĞÂµÄÊı¾İ²¢ÇÒÕâĞ©Êı¾İ¿ÉÒÔ´Ó´®¿Ú¶ÁÈ¡Ê±±»´¥·¢¡£
+    // readyReadä¿¡å·æ˜¯å½“ä¸²å£æ¥æ”¶åˆ°æ–°çš„æ•°æ®å¹¶ä¸”è¿™äº›æ•°æ®å¯ä»¥ä»ä¸²å£è¯»å–æ—¶è¢«è§¦å‘ã€‚
     connect(&m_port, &QSerialPort::readyRead, this, &Map::portReadReady);
 }
-// ÇëÇóµØÍ¼ÕÕÆ¬
+// è¯·æ±‚åœ°å›¾ç…§ç‰‡
 void Map::requestMapImage(const QString &center)
 {
-    // ¹¹½¨ÇëÇóµØÍ¼Í¼Æ¬µÄURLµØÖ·
+    // æ„å»ºè¯·æ±‚åœ°å›¾å›¾ç‰‡çš„URLåœ°å€
     QString url = baidudUrl.arg(baidudAk).arg(center);
 
     m_array.clear();
-    // ·¢³öÍøÂçÇëÇó
+    // å‘å‡ºç½‘ç»œè¯·æ±‚
     requestNetwork(url);
 }
 
 void Map::requestNetwork(const QString &url)
 {
     QSslConfiguration config;
-    // ÉèÖÃ¶ÔµÈ·½ÑéÖ¤Ä£Ê½Îª²»½øĞĞÑéÖ¤
+    // è®¾ç½®å¯¹ç­‰æ–¹éªŒè¯æ¨¡å¼ä¸ºä¸è¿›è¡ŒéªŒè¯
     config.setPeerVerifyMode(QSslSocket::VerifyNone);
-    // ÉèÖÃSSLĞ­Òé°æ±¾ÎªTlsV1_0
+    // è®¾ç½®SSLåè®®ç‰ˆæœ¬ä¸ºTlsV1_0
     config.setProtocol(QSsl::TlsV1_0);
 
     QNetworkRequest networkRequest;
-    // ½«Ö®Ç°ÅäÖÃºÃµÄSSLÅäÖÃĞÅÏ¢ÉèÖÃµ½ÍøÂçÇëÇó¶ÔÏóÖĞ
+    // å°†ä¹‹å‰é…ç½®å¥½çš„SSLé…ç½®ä¿¡æ¯è®¾ç½®åˆ°ç½‘ç»œè¯·æ±‚å¯¹è±¡ä¸­
     networkRequest.setSslConfiguration(config);
-    // ÉèÖÃÇëÇóµØÖ·
+    // è®¾ç½®è¯·æ±‚åœ°å€
     networkRequest.setUrl(url);
-    // »ñÈ¡ÇëÇó·µ»ØÊı¾İ
+    // è·å–è¯·æ±‚è¿”å›æ•°æ®
     QNetworkReply *newReply = m_networkAccessManager.get(networkRequest);
-    // µ±Ò»µ©ÇëÇóµ½Êı¾İÊ±Ö´ĞĞnetReadyRead
+    // å½“ä¸€æ—¦è¯·æ±‚åˆ°æ•°æ®æ—¶æ‰§è¡ŒnetReadyRead
     connect(newReply, &QNetworkReply::readyRead, this, &Map::netReadyRead);
-    // ÍøÂçÇëÇóÍê³ÉºóÖ´ĞĞdeleteLater
+    // ç½‘ç»œè¯·æ±‚å®Œæˆåæ‰§è¡ŒdeleteLater
     connect(newReply, &QNetworkReply::finished, newReply, &QNetworkReply::deleteLater);
 }
 
 void Map::netReadyRead()
 {
-    // Ê¹ÓÃqobject_cast½«·¢ËÍĞÅºÅµÄ¶ÔÏó×ª»»ÎªQNetworkReply *ÀàĞÍ
+    // ä½¿ç”¨qobject_castå°†å‘é€ä¿¡å·çš„å¯¹è±¡è½¬æ¢ä¸ºQNetworkReply *ç±»å‹
     QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    // ×·¼ÓÇëÇóµ½µÄÊı¾İ
+    // è¿½åŠ è¯·æ±‚åˆ°çš„æ•°æ®
     m_array.append(reply->readAll());
 
     QPixmap pixmap(m_array);
-    // ´Ó»ñÈ¡µÄÊı¾İ¹¹½¨³öÓĞĞ§µÄQPixmap¶ÔÏó²¢ÉèÖÃ
+    // ä»è·å–çš„æ•°æ®æ„å»ºå‡ºæœ‰æ•ˆçš„QPixmapå¯¹è±¡å¹¶è®¾ç½®
     if(pixmap.loadFromData(m_array)) {
         m_iconLabel.setPixmap(pixmap);
     }
 }
 
-// ¶ÁÈ¡´®¿ÚÊı¾İ
+// è¯»å–ä¸²å£æ•°æ®
 void Map::portReadReady()
 {
-    // µ±´®¿ÚÈÔÓĞÊı¾İ
+    // å½“ä¸²å£ä»æœ‰æ•°æ®
     while (m_port.bytesAvailable()) {
-        QString line = m_port.readLine(); // ¶ÁÈ¡Ò»ĞĞ
-        auto location = parseGpsData(line); // ½âÎöGPSÊı¾İ
+        QString line = m_port.readLine(); // è¯»å–ä¸€è¡Œ
+        auto location = parseGpsData(line); // è§£æGPSæ•°æ®
         if (!location.isEmpty()) {
             m_location = location;
-            line = "¶¨Î»³É¹¦£¬[" + location + "]";
-            requestMapImage(location); // ¸ù¾İ¾­Î³¶È¶¨Î»
+            line = "å®šä½æˆåŠŸï¼Œ[" + location + "]";
+            requestMapImage(location); // æ ¹æ®ç»çº¬åº¦å®šä½
         }
         else {
-            line = ("¶¨Î»ÖĞ... Çë³¢ÊÔÒÆµ½¿Õ¿õÎ»ÖÃ£¬Õ¹Ê¾×ø±ê [" + m_location + "]");
+            line = ("å®šä½ä¸­... è¯·å°è¯•ç§»åˆ°ç©ºæ—·ä½ç½®ï¼Œå±•ç¤ºåæ ‡ [" + m_location + "]");
         }
 
         m_logoLabel.setText(line);
@@ -160,40 +160,43 @@ void Map::on_back_clicked()
 {
     emit backout();
 }
-// ½âÎöGPSÊı¾İ
+// è§£æGPSæ•°æ®
 QString Map::parseGpsData(const QString &data)
 {
     QString ret;
-    // ¹ıÂËÎŞĞ§ĞÅÏ¢
+    // è¿‡æ»¤æ— æ•ˆä¿¡æ¯
     if (data.contains(",,,,,"))
         return ret;
-    // È¥³ıÊäÈëÊı¾İ×Ö·û´®Á½¶ËµÄ¿Õ°××Ö·ûºó£¬°´ÕÕ¶ººÅ½øĞĞ·Ö¸î
+    // å»é™¤è¾“å…¥æ•°æ®å­—ç¬¦ä¸²ä¸¤ç«¯çš„ç©ºç™½å­—ç¬¦åï¼ŒæŒ‰ç…§é€—å·è¿›è¡Œåˆ†å‰²
     auto list = data.trimmed().split(',');
     if (list.count() != 15)
         return ret;
-    // ÅĞ¶ÏµÚÒ»¸ö×Ö·û´®ÊÇ·ñÊÇGPS¶¨Î»Êı¾İ
-    if (!list.at(0).contains("$GPGGA"))
+    // åˆ¤æ–­æ˜¯å¦ä¸º GGA å®šä½è¯­å¥ï¼ˆæ”¯æŒ $GPGGA / $GNGGA / $BDGGA ç­‰ï¼‰
+    if (!list.at(0).contains("GGA"))
         return ret;
-    // ±£´æÔ­Ê¼¾­¶ÈÊı¾İ
+    // å®šä½è´¨é‡ä¸º 0 è¡¨ç¤ºæ— æ•ˆ
+    if (list.at(6).toInt() == 0)
+        return ret;
+    // ä¿å­˜åŸå§‹ç»åº¦æ•°æ®
     bool ok;
     auto e = list.at(4).toDouble(&ok);
     if (!ok)
         return ret;
-    // ±£´æÔ­Ê¼Î³¶ÈÊı¾İ
+    // ä¿å­˜åŸå§‹çº¬åº¦æ•°æ®
     auto n = list.at(2).toDouble(&ok);
     if (!ok)
         return ret;
-    // ¼ÆËã¾­¶ÈµÄÕûÊı²¿·Ö
+    // è®¡ç®—ç»åº¦çš„æ•´æ•°éƒ¨åˆ†
     int i = e / 100;
-    // ¼ÆËã¾­¶ÈµÄĞ¡Êı²¿·Ö
+    // è®¡ç®—ç»åº¦çš„å°æ•°éƒ¨åˆ†
     double j = (e / 100  - i) * 100 / 60.0;
-    // Æ´½Ó²¢±£Áô6Î»Ğ¡Êı
+    // æ‹¼æ¥å¹¶ä¿ç•™6ä½å°æ•°
     ret = QString::number(i+j, 'f', 6);
-    // ¼ÆËãÎ³¶ÈµÄÕûÊı²¿·Ö
+    // è®¡ç®—çº¬åº¦çš„æ•´æ•°éƒ¨åˆ†
     i = n / 100;
-    // ¼ÆËãÎ³¶ÈµÄĞ¡Êı²¿·Ö
+    // è®¡ç®—çº¬åº¦çš„å°æ•°éƒ¨åˆ†
     j = (n / 100  - i) * 100 / 60.0;
-    // ½«¾­Î³¶ÈÆ´½Ó
+    // å°†ç»çº¬åº¦æ‹¼æ¥
     ret = ret + ',' + QString::number(i+j, 'f', 6);
 
     return ret;

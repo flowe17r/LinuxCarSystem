@@ -30,10 +30,12 @@
 
 | 模块 | 型号 | 接口 / 设备节点 | 说明 |
 |------|------|-----------------|------|
-| **温湿度** | DHT11（百问配套） | `/dev/mydht11` | 需加载 `dht11_drv` 内核驱动；DATA 接 **GPIO4_IO19**（Linux GPIO **115**） |
-| **GPS** | ATGM336H（百问配套，串口 TTL） | `/dev/ttymxc5`（UART5） | **9600** 8N1，NMEA **`$GPGGA`**；模块 **TX → 板子 RX**；室外或靠窗定位 |
-
-接线请参考百问 **《嵌入式 Linux 应用开发完全手册》IMX6ULL Pro** 扩展板章节，或课程资料 `04_嵌入式Linux应用开发基础知识/doc_pic/10.UART/05_Linux串口应用编程.md`（§3.5.1 GPS 接线图）。
+| **温湿度** | DHT11| `/dev/mydht11` | 需加载 `dht11_drv` 内核驱动；DATA 接 **GPIO4_IO19**（Linux GPIO **115**） |
+| **GPS** | ATGM336H | `/dev/ttymxc5`（UART6） | **9600** 8N1，NMEA **`$GPGGA`**；模块 **TX → 板子 RX**；室外或靠窗定位 |
+gps:VCC 开发板3.3V 
+    gnd       gnd 
+    TX        uart6_rx
+    RX        uart6_tx
 
 #### 未配置 / 可选外设
 
@@ -182,7 +184,7 @@ cd /root
 
 ### 环境监控
 
-- **当前硬件**：DHT11 → `/dev/mydht11`（需百问 `dht11_drv` 驱动）
+- **当前硬件**：DHT11 → `/dev/mydht11`（需要修改设备树，在linux重新编译设备树，然后传到开发板/boot/下）
 - 温湿度在「硬件监控」页显示；未接 SR04 / MQ135 等时，距离与空气质量相关控件无效，终端可能有 open 失败日志
 
 ### GPS 地图

@@ -1,8 +1,8 @@
 /*
- * DHT11 温湿度传感器驱动（100ASK IMX6ULL Pro）
+ * DHT11 温湿度驱动（100ASK IMX6ULL Pro）
  * 设备节点: /dev/mydht11
  * read() 返回 4 字节: [湿度整数, 湿度小数, 温度整数, 温度小数]
- * 需在设备树中添加 compatible = "100ask,dht11", gpios = <&gpio4 19 GPIO_ACTIVE_HIGH>
+ * 设备树: compatible = "100ask,dht11", gpios = <&gpio4 19 GPIO_ACTIVE_HIGH>
  */
 
 #include <linux/module.h>
@@ -12,12 +12,8 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/gpio/consumer.h>
-#include <linux/interrupt.h>
-#include <linux/poll.h>
-#include <linux/wait.h>
 #include <linux/delay.h>
 #include <linux/irqflags.h>
-#include <linux/slab.h>
 
 static int major;
 static struct class *dht11_class;
@@ -39,7 +35,7 @@ static void dht11_start(void)
 	udelay(2);
 }
 
-static int dht11_wait_for_ready(void)
+static int dht11_wait_ready(void)
 {
 	int timeout_us = 20000;
 
@@ -63,12 +59,11 @@ static int dht11_wait_for_ready(void)
 	return 0;
 }
 
-static int dht11_read_byte(unsigned char *buf)
+static int dht11_read_byte(u8 *byte)
 {
 	int i;
-	int us;
-	unsigned char data = 0;
 	int timeout_us;
+	u8 data = 0;
 
 	for (i = 0; i < 8; i++) {
 		timeout_us = 400;
@@ -91,44 +86,59 @@ static int dht11_read_byte(unsigned char *buf)
 		}
 	}
 
-	*buf = data;
+	*byte = data;
 	return 0;
 }
 
-static ssize_t dht11_drv_read(struct file *file, char __user *buf,
-			      size_t size, loff_t *offset)
+static int dht11_read_data(u8 data[5])
 {
 	unsigned long flags;
 	int i;
-	unsigned char data[5];
-
-	if (size != 4)
-		return -EINVAL;
+	int ret = 0;
 
 	local_irq_save(flags);
 
 	dht11_reset();
 	dht11_start();
 
-	if (dht11_wait_for_ready()) {
-		local_irq_restore(flags);
-		return -EAGAIN;
+	if (dht11_wait_ready()) {
+		ret = -EAGAIN;
+		goto out;
 	}
 
 	for (i = 0; i < 5; i++) {
 		if (dht11_read_byte(&data[i])) {
-			local_irq_restore(flags);
-			return -EAGAIN;
+			ret = -EAGAIN;
+			goto out;
 		}
 	}
 
 	dht11_reset();
+
+out:
 	local_irq_restore(flags);
 
-	if (data[4] != (data[0] + data[1] + data[2] + data[3])) {
-		pr_err("dht11: checksum error\n");
+	if (ret)
+		return ret;
+
+	if (data[4] != (u8)(data[0] + data[1] + data[2] + data[3]))
 		return -EIO;
-	}
+
+	return 0;
+}
+
+static ssize_t dht11_drv_read(struct file *file, char __user *buf,
+			      size_t size, loff_t *offset)
+{
+	u8 data[5];
+	int ret;
+
+	if (size != 4)
+		return -EINVAL;
+
+	ret = dht11_read_data(data);
+	if (ret)
+		return ret;
 
 	if (copy_to_user(buf, data, 4))
 		return -EFAULT;
@@ -145,7 +155,7 @@ static int dht11_probe(struct platform_device *pdev)
 {
 	dht11_data_pin = gpiod_get(&pdev->dev, NULL, GPIOD_OUT_HIGH);
 	if (IS_ERR(dht11_data_pin)) {
-		pr_err("dht11: failed to get gpio\n");
+		dev_err(&pdev->dev, "failed to get gpio\n");
 		return PTR_ERR(dht11_data_pin);
 	}
 
@@ -160,24 +170,24 @@ static int dht11_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id ask100_dht11[] = {
+static const struct of_device_id dht11_of_match[] = {
 	{ .compatible = "100ask,dht11" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ask100_dht11);
+MODULE_DEVICE_TABLE(of, dht11_of_match);
 
 static struct platform_driver dht11_driver = {
 	.probe  = dht11_probe,
 	.remove = dht11_remove,
 	.driver = {
 		.name           = "100ask_dht11",
-		.of_match_table = ask100_dht11,
+		.of_match_table = dht11_of_match,
 	},
 };
 
-static int __init dht11_init(void)
+static int __init dht11_drv_init(void)
 {
-	int err;
+	int ret;
 
 	major = register_chrdev(0, "dht11", &dht11_fops);
 	if (major < 0)
@@ -185,28 +195,29 @@ static int __init dht11_init(void)
 
 	dht11_class = class_create(THIS_MODULE, "dht11_class");
 	if (IS_ERR(dht11_class)) {
+		ret = PTR_ERR(dht11_class);
 		unregister_chrdev(major, "dht11");
-		return PTR_ERR(dht11_class);
+		return ret;
 	}
 
-	err = platform_driver_register(&dht11_driver);
-	if (err) {
+	ret = platform_driver_register(&dht11_driver);
+	if (ret) {
 		class_destroy(dht11_class);
 		unregister_chrdev(major, "dht11");
 	}
 
-	return err;
+	return ret;
 }
 
-static void __exit dht11_exit(void)
+static void __exit dht11_drv_exit(void)
 {
 	platform_driver_unregister(&dht11_driver);
 	class_destroy(dht11_class);
 	unregister_chrdev(major, "dht11");
 }
 
-module_init(dht11_init);
-module_exit(dht11_exit);
+module_init(dht11_drv_init);
+module_exit(dht11_drv_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Smart_car");
