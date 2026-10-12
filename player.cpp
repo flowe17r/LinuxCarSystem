@@ -10,7 +10,7 @@
 #include <QMediaMetaData>
 #include <QtWidgets>
 
-// 包含数据库操作相关头文件
+// 数据库操作相关头文件
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -19,99 +19,87 @@
 #include <QVariant>
 #include <QList>
 
+/**
+ * @brief Player 构造函数：初始化视频播放器界面、播放引擎、数据库和信号连接
+ * @param parent 父窗口指针
+ */
 Player::Player(QWidget *parent)
     : QWidget(parent)
 {
-
-    // 设置部件的大小策略为忽略大小，即根据视频内容或父布局等因素自动调整大小
+    // ------ 1. 设置窗口基础样式 ------
+    // 忽略大小策略，让视频控件自动适应父布局大小变化
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
 
-    // 获取当前部件的调色板对象
+    // 设置背景色为深灰 (RGB 51,51,51)，使视频区域背景不刺眼
     QPalette p = palette();
-    // 将调色板的窗口颜色设置为黑色，这样视频显示区域的背景色将为黑色
     QColor backgroundColor(51,51,51);
     p.setColor(QPalette::Window, backgroundColor);
-    // 将设置好的调色板应用到当前部件上
     setPalette(p);
 
-    // 创建QMediaPlayer对象，用于播放媒体文件，设置其音频角色，并输出支持的音频角色信息
+    // ------ 2. 创建媒体播放器和播放列表 ------
     m_player = new QMediaPlayer(this);
-
+    // 设置音频角色为视频角色（让系统按视频场景优化音频）
     m_player->setAudioRole(QAudio::VideoRole);
     qInfo() << "Supported audio roles:";
     for (QAudio::Role role : m_player->supportedAudioRoles())
         qInfo() << "    " << role;
 
-    // 创建QMediaPlaylist对象，用于管理播放列表
+    // 创建播放列表并关联到播放器
     m_playlist = new QMediaPlaylist();
     m_player->setPlaylist(m_playlist);
 
-    // 创建VideoWidget对象，用于显示视频内容
+    // ------ 3. 创建视频显示控件 ------
     m_videoWidget = new VideoWidget(this);
     m_player->setVideoOutput(m_videoWidget);
 
-    // 创建PlaylistModel对象，用于管理播放列表的数据模型
+    // ------ 4. 创建播放列表模型和视图 ------
     m_playlistModel = new PlaylistModel(this);
     m_playlistModel->setPlaylist(m_playlist);
 
-    // 用于在界面上显示播放列表
     m_playlistView = new QListView(this);
     m_playlistView->setModel(m_playlistModel);
+    // 高亮当前播放项
     m_playlistView->setCurrentIndex(m_playlistModel->index(m_playlist->currentIndex(), 0));
+    // 透明背景，白色文字（适应深色背景）
     m_playlistView->setStyleSheet("background-color: transparent; color:white");
-    // 用于表示媒体播放的进度条，设置其范围为0到媒体总时长（以秒为单位）
-    m_slider = new QSlider(Qt::Horizontal, this);
-    m_slider->setRange(0, m_player->duration() / 1000);
 
-    // 用于显示媒体的总时长等相关信息
+    // ------ 5. 创建进度条和时间标签 ------
+    m_slider = new QSlider(Qt::Horizontal, this);
+    m_slider->setRange(0, m_player->duration() / 1000); // 单位：秒
     m_labelDuration = new QLabel(this);
 
-
-    // 用于打开文件选择对话框以添加媒体文件到播放列表
+    // ------ 6. 创建控制按钮（打开、返回、全屏） ------
     openButton = new QPushButton(tr("Open"), this);
-    openButton->setStyleSheet("QPushButton { background-color: transparent; "
-                              "color: white; "
-                              "border: 1px solid white; "
-                              "width: 50px;"
-                              "}"
-                              "QPushButton:hover { background-color: lightgray; "
-                              "}"
+    openButton->setStyleSheet(
+        "QPushButton { background-color: transparent; color: white; border: 1px solid white; width: 50px; }"
+        "QPushButton:hover { background-color: lightgray; }"
     );
-    // 用于返回主界面
+
     backButton = new QPushButton(tr("Back"), this);
-    backButton->setStyleSheet("QPushButton { background-color: transparent; "
-                              "color: white; "
-                              "border: 1px solid white; "
-                              "width: 50px;"
-                              "}"
-                              "QPushButton:hover { background-color: lightgray; "
-                              "}"
+    backButton->setStyleSheet(
+        "QPushButton { background-color: transparent; color: white; border: 1px solid white; width: 50px; }"
+        "QPushButton:hover { background-color: lightgray; }"
     );
-    // 设置其初始状态、音量等属性为m_player的当前状态和音量
+
+    m_fullScreenButton = new QPushButton(tr("FullScreen"), this);
+    m_fullScreenButton->setCheckable(true);
+    m_fullScreenButton->setStyleSheet(
+        "QPushButton { background-color: transparent; color: white; border: 1px solid white; width: 100px; }"
+        "QPushButton:hover { background-color: lightgray; }"
+    );
+
+    // ------ 7. 创建自定义播放控制面板（包含播放/暂停/音量等） ------
     controls = new PlayerControls(this);
+    // 初始状态同步
     controls->setState(m_player->state());
     controls->setVolume(m_player->volume());
     controls->setMuted(controls->isMuted());
 
-    // 用于切换视频播放的全屏模式
-    m_fullScreenButton = new QPushButton(tr("FullScreen"), this);
-    m_fullScreenButton->setCheckable(true);
-    m_fullScreenButton->setStyleSheet("QPushButton { background-color: transparent; "
-                              "color: white; "
-                              "border: 1px solid white; "
-                              "width: 100px;"
-                              "}"
-                              "QPushButton:hover { background-color: lightgray; "
-                              "}"
-    );
-
-
-    // 创建水平布局对象，用于放置视频显示部件和播放列表视图部件
+    // ------ 8. 布局：视频 + 列表（水平），进度条，控制按钮行 ------
     QBoxLayout *displayLayout = new QHBoxLayout;
-    displayLayout->addWidget(m_videoWidget, 2);
-    displayLayout->addWidget(m_playlistView);
+    displayLayout->addWidget(m_videoWidget, 2);   // 视频占 2/3
+    displayLayout->addWidget(m_playlistView);     // 列表占 1/3
 
-    // 用于放置各种控制按钮和部件，设置其边距为0
     QBoxLayout *controlLayout = new QHBoxLayout;
     controlLayout->setMargin(0);
     controlLayout->addWidget(openButton);
@@ -123,8 +111,6 @@ Player::Player(QWidget *parent)
     controlLayout->addStretch(1);
     controlLayout->addWidget(m_fullScreenButton);
 
-
-    // 创建垂直布局对象，用于组合整个播放器的界面布局
     QBoxLayout *layout = new QVBoxLayout;
     layout->addLayout(displayLayout);
 
@@ -134,10 +120,7 @@ Player::Player(QWidget *parent)
     layout->addLayout(hLayout);
     layout->addLayout(controlLayout);
 
-
-    // 在QNX系统下，主窗口没有标题栏等装饰，创建一个状态栏用于显示状态信息
-    // 设置状态栏不启用鼠标抓取功能，因为在没有标题栏的情况下该功能可能不太好用
-    // 将状态栏添加到整体布局中
+    // QNX 系统无标题栏，额外增加状态栏显示信息
     #if defined(Q_OS_QNX)
     m_statusLabel = new QLabel;
     m_statusBar = new QStatusBar;
@@ -146,54 +129,48 @@ Player::Player(QWidget *parent)
     layout->addWidget(m_statusBar);
     #endif
 
-    // 设置Player窗口的布局为上述创建的整体布局
     setLayout(layout);
 
-    // 检查媒体播放器是否可用
+    // ------ 9. 检查媒体服务是否可用 ------
     if (!isPlayerAvailable()) {
         QMessageBox::warning(this, tr("Service not available"),
-                             tr("The QMediaPlayer object does not have a valid service.\n"\
+                             tr("The QMediaPlayer object does not have a valid service.\n"
                                 "Please check the media service plugins are installed."));
-
         controls->setEnabled(false);
         m_playlistView->setEnabled(false);
         openButton->setEnabled(false);
         m_fullScreenButton->setEnabled(false);
     }
 
-    // 创建并打开数据库连接
+    // ------ 10. 初始化 SQLite 数据库 ------
     m_database = QSqlDatabase::addDatabase("QSQLITE");
-    // 设置数据库文件路径为当前目录下的media_player.db
     m_database.setDatabaseName(QCoreApplication::applicationDirPath() + "/media_player.db");
-
     if (!m_database.open()) {
         qDebug() << "无法打开数据库：" << m_database.lastError().text();
         return;
     }
 
-    // 创建名为video的表
+    // 创建表 video（若不存在）
     QSqlQuery createTableQuery;
-    createTableQuery.prepare("CREATE TABLE IF NOT EXISTS video ("
-                             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                             "video_name TEXT UNIQUE"
-                             ")");
-
+    createTableQuery.prepare(
+        "CREATE TABLE IF NOT EXISTS video ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "video_name TEXT UNIQUE)"
+    );
     if (!createTableQuery.exec()) {
         qDebug() << "创建表失败：" << createTableQuery.lastError().text();
     }
 
-    // 程序启动时，从数据库中读取数据并添加到播放列表
+    // 从数据库加载历史播放列表
     loadPlaylistFromDatabase();
 
-    // 调用元数据改变的槽函数，初始化相关的元数据显示等操作
+    // ------ 11. 初始化元数据显示 ------
     metaDataChanged();
-    setFixedSize(1024,600);
 
+    // 固定窗口大小（适配 1024x600 屏幕，如嵌入式设备）
+    setFixedSize(1024, 600);
 
-}
-// 工作函数，当线程启动时开启各种槽函数的连接
-void Player::player_working()
-{
+    // ------ 12. 连接所有信号与槽 ------
     connect(m_player, &QMediaPlayer::durationChanged, this, &Player::durationChanged);
     connect(m_player, &QMediaPlayer::positionChanged, this, &Player::positionChanged);
     connect(m_player, QOverload<>::of(&QMediaPlayer::metaDataChanged), this, &Player::metaDataChanged);
@@ -206,6 +183,8 @@ void Player::player_working()
     connect(m_slider, &QSlider::sliderMoved, this, &Player::seek);
     connect(openButton, &QPushButton::clicked, this, &Player::open);
     connect(backButton, &QPushButton::clicked, this, &Player::backout);
+
+    // 播放控制面板的信号 → 播放器操作
     connect(controls, &PlayerControls::play, m_player, &QMediaPlayer::play);
     connect(controls, &PlayerControls::pause, m_player, &QMediaPlayer::pause);
     connect(controls, &PlayerControls::stop, m_player, &QMediaPlayer::stop);
@@ -215,87 +194,70 @@ void Player::player_working()
     connect(controls, &PlayerControls::changeMuting, m_player, &QMediaPlayer::setMuted);
     connect(controls, &PlayerControls::changeRate, m_player, &QMediaPlayer::setPlaybackRate);
     connect(controls, &PlayerControls::stop, m_videoWidget, QOverload<>::of(&QVideoWidget::update));
+
+    // 播放器状态变化 → 同步控制面板状态
     connect(m_player, &QMediaPlayer::stateChanged, controls, &PlayerControls::setState);
     connect(m_player, &QMediaPlayer::volumeChanged, controls, &PlayerControls::setVolume);
     connect(m_player, &QMediaPlayer::mutedChanged, controls, &PlayerControls::setMuted);
-
 }
+
+/**
+ * @brief 析构函数：关闭数据库连接
+ */
 Player::~Player()
 {
-    // 关闭数据库连接
     if (m_database.isOpen()) {
         m_database.close();
     }
-
 }
-// 清理连接
-void Player::clearConnections()
- {
 
-     disconnect(m_player, &QMediaPlayer::durationChanged, this, &Player::durationChanged);
-     disconnect(m_player, &QMediaPlayer::positionChanged, this, &Player::positionChanged);
-     disconnect(m_player, QOverload<>::of(&QMediaPlayer::metaDataChanged), this, &Player::metaDataChanged);
-     disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, &Player::statusChanged);
-     disconnect(m_player, &QMediaPlayer::bufferStatusChanged, this, &Player::bufferingProgress);
-     disconnect(m_player, &QMediaPlayer::videoAvailableChanged, this, &Player::videoAvailableChanged);
-     disconnect(m_player, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error), this, &Player::displayErrorMessage);
-     disconnect(m_playlistView, &QAbstractItemView::activated, this, &Player::jump);
-     disconnect(m_slider, &QSlider::sliderMoved, this, &Player::seek);
-     disconnect(openButton, &QPushButton::clicked, this, &Player::open);
-     disconnect(backButton, &QPushButton::clicked, this, &Player::backout);
-     disconnect(controls, &PlayerControls::play, m_player, &QMediaPlayer::play);
-     disconnect(controls, &PlayerControls::pause, m_player, &QMediaPlayer::pause);
-     disconnect(controls, &PlayerControls::stop, m_player, &QMediaPlayer::stop);
-     disconnect(controls, &PlayerControls::next, m_playlist, &QMediaPlaylist::next);
-     disconnect(controls, &PlayerControls::previous, this, &Player::previousClicked);
-     disconnect(controls, &PlayerControls::changeVolume, m_player, &QMediaPlayer::setVolume);
-     disconnect(controls, &PlayerControls::changeMuting, m_player, &QMediaPlayer::setMuted);
-     disconnect(controls, &PlayerControls::changeRate, m_player, &QMediaPlayer::setPlaybackRate);
-     disconnect(controls, &PlayerControls::stop, m_videoWidget, QOverload<>::of(&QVideoWidget::update));
-     disconnect(m_player, &QMediaPlayer::stateChanged, controls, &PlayerControls::setState);
-     disconnect(m_player, &QMediaPlayer::volumeChanged, controls, &PlayerControls::setVolume);
-     disconnect(m_player, &QMediaPlayer::mutedChanged, controls, &PlayerControls::setMuted);
-}
-// 判断媒体播放器是否可用
+// ==================== 公共接口 ====================
+
+/**
+ * @brief 检查媒体播放器是否可用（服务插件是否加载成功）
+ */
 bool Player::isPlayerAvailable() const
 {
     return m_player->isAvailable();
 }
 
-// 打开文件并将所选文件插入数据库
+/**
+ * @brief 打开文件对话框，选择视频文件，将文件名存入数据库并添加到播放列表
+ *
+ * 流程：
+ * 1. 弹出文件对话框，支持按 MIME 类型过滤。
+ * 2. 对每个选中的文件，提取基础名（不含扩展名）。
+ * 3. 检查该名称是否已存在于数据库（去重）。
+ * 4. 若不存在，插入数据库并添加到播放列表。
+ */
 void Player::open()
 {
-    // 设置一个QFileDialog对象
     QFileDialog fileDialog(this);
-    // 设置文件对话框的接受模式为打开文件，标题为 Open Files
     fileDialog.setAcceptMode(QFileDialog::AcceptOpen);
     fileDialog.setWindowTitle(tr("Open Files"));
 
-    // 获取支持的MIME文件类型
+    // 获取播放器支持的 MIME 类型，用于过滤文件
     QStringList supportedMimeTypes = m_player->supportedMimeTypes();
     if (!supportedMimeTypes.isEmpty()) {
-        supportedMimeTypes.append("audio/x-m3u"); // MP3 playlists
+        supportedMimeTypes.append("audio/x-m3u"); // MP3 播放列表
         fileDialog.setMimeTypeFilters(supportedMimeTypes);
     }
 
-    // 设置文件对话框的初始目录为当前目录下的Videos文件夹
+    // 默认打开程序目录下的 Videos 文件夹
     fileDialog.setDirectory(QCoreApplication::applicationDirPath() + "/Videos");
 
-    // 选择文件
     if (fileDialog.exec() == QDialog::Accepted) {
         QList<QUrl> selectedUrls = fileDialog.selectedUrls();
 
-        // 将所选文件保存到数据库中，并添加到播放列表
         QSqlQuery insertQuery;
         for (const QUrl& url : selectedUrls) {
             QFileInfo fileInfo(url.toLocalFile());
             QString videoNameWithoutExtension = fileInfo.completeBaseName();
 
-            insertQuery.prepare("INSERT INTO video (video_name) VALUES (:video_name)");
-            insertQuery.bindValue(":video_name", videoNameWithoutExtension);
-
-            // 检查是否已存在相同名称的视频记录，避免重复添加
+            // 检查是否已存在
             if (!isVideoAlreadyExists(videoNameWithoutExtension)) {
+                insertQuery.prepare("INSERT INTO video (video_name) VALUES (:video_name)");
+                insertQuery.bindValue(":video_name", videoNameWithoutExtension);
                 if (!insertQuery.exec()) {
                     qDebug() << "插入数据失败：" << insertQuery.lastError().text();
                 }
@@ -307,52 +269,47 @@ void Player::open()
     }
 }
 
+/**
+ * @brief 返回上一级界面（停止播放、重置进度，发送 back 信号）
+ */
 void Player::backout()
 {
-    // 暂停播放（如果正在播放）
-    if (m_player->state() == QMediaPlayer::PlayingState)
-    {
+    if (m_player->state() == QMediaPlayer::PlayingState) {
         m_player->pause();
     }
-
-    // 将播放位置设置为0
     m_player->setPosition(0);
-
-    // 重置进度条位置
     m_slider->setValue(0);
     emit this->back();
 }
 
-// 检查指定视频名称是否已存在于数据库中的函数
+// ==================== 数据库辅助函数 ====================
+
+/**
+ * @brief 检查指定视频名称是否已存在于 video 表中
+ */
 bool Player::isVideoAlreadyExists(const QString &videoName)
 {
     QSqlQuery checkQuery;
     checkQuery.prepare("SELECT COUNT(*) FROM video WHERE video_name = :video_name");
     checkQuery.bindValue(":video_name", videoName);
-
-    if (checkQuery.exec()) {
-        if (checkQuery.next()) {
-            int count = checkQuery.value(0).toInt();
-            return count > 0;
-        }
+    if (checkQuery.exec() && checkQuery.next()) {
+        int count = checkQuery.value(0).toInt();
+        return count > 0;
     }
-
     return false;
 }
 
-// 从数据库中加载播放列表数据
+/**
+ * @brief 从数据库加载所有视频名称，查找对应文件并添加到播放列表
+ *
+ * 数据库只存名称，实际文件在 ./Videos/ 目录下，依次尝试 .mp4, .mkv, .avi
+ */
 void Player::loadPlaylistFromDatabase()
 {
-    // 查询数据库
     QSqlQuery selectQuery("SELECT * FROM video");
     while (selectQuery.next()) {
-        int id = selectQuery.value(0).toInt();
         QString videoName = selectQuery.value(1).toString();
-
-        // 根据视频名称查找对应的文件路径
         QString videoPath = findVideoPath(videoName);
-
-        // 如果找到文件路径，则创建QUrl并添加到播放列表
         if (!videoPath.isEmpty()) {
             QUrl videoUrl = QUrl::fromLocalFile(videoPath);
             m_playlist->addMedia(videoUrl);
@@ -360,46 +317,41 @@ void Player::loadPlaylistFromDatabase()
     }
 }
 
-// 根据视频名称查找对应的文件路径
+/**
+ * @brief 根据视频名称查找文件路径（按扩展名顺序查找）
+ */
 QString Player::findVideoPath(const QString &videoName)
 {
-    // 原始路径
     QString basePath = QCoreApplication::applicationDirPath() + "/Videos";
-
-    // 先尝试查找.mp4格式的文件
-    QString videoPathMp4 = basePath + QDir::separator() + videoName + ".mp4";
-    if (QFile::exists(videoPathMp4)) {
-        return videoPathMp4;
+    // 依次尝试 .mp4, .mkv, .avi
+    QStringList extensions = {".mp4", ".mkv", ".avi"};
+    for (const QString &ext : extensions) {
+        QString fullPath = basePath + QDir::separator() + videoName + ext;
+        if (QFile::exists(fullPath))
+            return fullPath;
     }
-
-    // 再尝试查找.mkv格式的文件
-    QString videoPathMkv = basePath + QDir::separator() + videoName + ".mkv";
-    if (QFile::exists(videoPathMkv)) {
-        return videoPathMkv;
-    }
-
-    // 最后尝试查找.avi格式的文件
-    QString videoPathAvi = basePath + QDir::separator() + videoName + ".avi";
-    if (QFile::exists(videoPathAvi)) {
-        return videoPathAvi;
-    }
-
     return QString();
 }
 
-// 用于判断给定的URL是否指向一个.m3u播放列表文件
+// ==================== 播放列表辅助 ====================
+
+/**
+ * @brief 判断 URL 是否指向 .m3u 播放列表文件
+ */
 static bool isPlaylist(const QUrl &url)
 {
     if (!url.isLocalFile())
         return false;
     const QFileInfo fileInfo(url.toLocalFile());
-    return fileInfo.exists() &&!fileInfo.suffix().compare(QLatin1String("m3u"), Qt::CaseInsensitive);
+    return fileInfo.exists() && !fileInfo.suffix().compare(QLatin1String("m3u"), Qt::CaseInsensitive);
 }
 
-// 将给定的URL列表中的文件添加到播放列表的函数
+/**
+ * @brief 将 URL 列表添加到播放列表（若为 .m3u 则加载其内容）
+ */
 void Player::addToPlaylist(const QList<QUrl> &urls)
 {
-    for (auto &url: urls) {
+    for (auto &url : urls) {
         if (isPlaylist(url))
             m_playlist->load(url);
         else
@@ -407,58 +359,74 @@ void Player::addToPlaylist(const QList<QUrl> &urls)
     }
 }
 
+// ==================== 播放控制槽函数 ====================
+
+/**
+ * @brief 设置自定义音频角色（由外部调用）
+ */
 void Player::setCustomAudioRole(const QString &role)
 {
     m_player->setCustomAudioRole(role);
 }
 
-// 更新进度条的最大值为新的媒体时长
+/**
+ * @brief 更新进度条最大值为媒体总时长（秒）
+ */
 void Player::durationChanged(qint64 duration)
 {
     m_duration = duration / 1000;
     m_slider->setMaximum(m_duration);
 }
 
-
-// 如果进度条的滑块没有被用户拖动，则更新进度条的当前值为新的播放位置
+/**
+ * @brief 播放位置变化时更新进度条和时间显示
+ *
+ * 如果用户没有拖动滑块，则自动更新滑块位置；
+ * 否则不干扰用户拖动操作，仅在释放时跳转。
+ */
 void Player::positionChanged(qint64 progress)
 {
     if (!m_slider->isSliderDown())
         m_slider->setValue(progress / 1000);
-
     updateDurationInfo(progress / 1000);
 }
 
-// 如果媒体元Data可用，则设置轨道信息（如专辑艺术家和歌曲标题）显示在相关位置
-// 并根据封面艺术图片的URL设置封面标签的图片，如果URL为空则设置为空图片
+/**
+ * @brief 元数据可用时，更新轨道信息和封面图
+ *
+ * 读取 AlbumArtist 和 Title 拼接显示；
+ * 封面图通过 CoverArtUrlLarge 加载。
+ */
 void Player::metaDataChanged()
 {
     if (m_player->isMetaDataAvailable()) {
         setTrackInfo(QString("%1 - %2")
-           .arg(m_player->metaData(QMediaMetaData::AlbumArtist).toString())
-           .arg(m_player->metaData(QMediaMetaData::Title).toString()));
+            .arg(m_player->metaData(QMediaMetaData::AlbumArtist).toString())
+            .arg(m_player->metaData(QMediaMetaData::Title).toString()));
 
         if (m_coverLabel) {
             QUrl url = m_player->metaData(QMediaMetaData::CoverArtUrlLarge).value<QUrl>();
-
             m_coverLabel->setPixmap(!url.isEmpty()
-                  ? QPixmap(url.toString())
-                    : QPixmap());
+                ? QPixmap(url.toString())
+                : QPixmap());
         }
     }
 }
 
-// 如果当前播放位置在开始的5秒内，则切换到播放列表中的上一首曲目；否则将播放位置设置为0
+/**
+ * @brief 上一曲按钮点击处理：若播放位置 ≤5 秒则切换到上一首，否则跳转到开头
+ */
 void Player::previousClicked()
 {
-
     if (m_player->position() <= 5000)
         m_playlist->previous();
     else
         m_player->setPosition(0);
 }
 
-// 切换视频
+/**
+ * @brief 双击播放列表项时切换并播放
+ */
 void Player::jump(const QModelIndex &index)
 {
     if (index.isValid()) {
@@ -467,20 +435,27 @@ void Player::jump(const QModelIndex &index)
     }
 }
 
-// 设置当前索引为所选择的索引
+/**
+ * @brief 播放列表当前索引变化时，同步高亮视图中的对应项
+ */
 void Player::playlistPositionChanged(int currentItem)
 {
     m_playlistView->setCurrentIndex(m_playlistModel->index(currentItem, 0));
 }
 
-// 根据传入的秒数设置媒体播放位置的函数
-// 通过调用m_player的setPosition函数将播放位置设置为指定的毫秒数（由传入的秒数转换而来）
+/**
+ * @brief 进度条拖动释放后跳转到对应位置（秒→毫秒）
+ */
 void Player::seek(int seconds)
 {
     m_player->setPosition(seconds * 1000);
 }
 
-// 根据不同的媒体状态设置相应的状态信息显示，并处理鼠标光标样式（在加载、缓冲、卡顿等状态时设置为忙碌光标）
+// ==================== 状态与错误处理 ====================
+
+/**
+ * @brief 媒体状态变化时更新状态信息，并控制鼠标光标样式
+ */
 void Player::statusChanged(QMediaPlayer::MediaStatus status)
 {
     handleCursor(status);
@@ -502,7 +477,7 @@ void Player::statusChanged(QMediaPlayer::MediaStatus status)
         setStatusInfo(tr("Stalled %1%").arg(m_player->bufferStatus()));
         break;
     case QMediaPlayer::EndOfMedia:
-        QApplication::alert(this);
+        QApplication::alert(this);  // 闪一下任务栏/窗口
         break;
     case QMediaPlayer::InvalidMedia:
         displayErrorMessage();
@@ -510,21 +485,25 @@ void Player::statusChanged(QMediaPlayer::MediaStatus status)
     }
 }
 
+/**
+ * @brief 根据媒体状态设置鼠标指针为忙碌或默认
+ */
 void Player::handleCursor(QMediaPlayer::MediaStatus status)
 {
-    // 如果媒体处于加载、缓冲或卡顿状态，则设置鼠标光标为忙碌光标；
 #ifndef QT_NO_CURSOR
     if (status == QMediaPlayer::LoadingMedia ||
         status == QMediaPlayer::BufferingMedia ||
-        status == QMediaPlayer::StalledMedia)
+        status == QMediaPlayer::StalledMedia) {
         setCursor(QCursor(Qt::BusyCursor));
-    // 否则恢复默认光标样式
-    else
+    } else {
         unsetCursor();
+    }
 #endif
 }
 
-// 根据媒体当前状态（是否卡顿）设置相应的状态信息显示为缓冲进度的百分比
+/**
+ * @brief 缓冲进度变化时更新状态信息（区分卡顿和正常缓冲）
+ */
 void Player::bufferingProgress(int progress)
 {
     if (m_player->mediaStatus() == QMediaPlayer::StalledMedia)
@@ -533,30 +512,31 @@ void Player::bufferingProgress(int progress)
         setStatusInfo(tr("Buffering %1%").arg(progress));
 }
 
-// 当视频是否可用状态改变时调用的槽函数
+/**
+ * @brief 视频可用性变化时连接/断开全屏按钮与视频控件
+ */
 void Player::videoAvailableChanged(bool available)
 {
-    // 如果视频不可用，断开全屏按钮与视频部件全屏设置相关的连接，并将视频部件设置为非全屏状态
     if (!available) {
         disconnect(m_fullScreenButton, &QPushButton::clicked, m_videoWidget, &QVideoWidget::setFullScreen);
         disconnect(m_videoWidget, &QVideoWidget::fullScreenChanged, m_fullScreenButton, &QPushButton::setChecked);
         m_videoWidget->setFullScreen(false);
-    // 如果视频可用，重新建立连接，并根据全屏按钮的勾选状态设置视频部件的全屏状态，同时启用颜色设置按钮
     } else {
         connect(m_fullScreenButton, &QPushButton::clicked, m_videoWidget, &QVideoWidget::setFullScreen);
         connect(m_videoWidget, &QVideoWidget::fullScreenChanged, m_fullScreenButton, &QPushButton::setChecked);
-
         if (m_fullScreenButton->isChecked())
             m_videoWidget->setFullScreen(true);
     }
 }
 
+// ==================== 信息显示工具函数 ====================
 
-// 更新m_trackInfo成员变量，并根据是否存在状态栏来设置相应的状态信息显示位置（状态栏或窗口标题）的信息
+/**
+ * @brief 设置轨道信息（曲目标题/艺术家），显示在状态栏或窗口标题
+ */
 void Player::setTrackInfo(const QString &info)
 {
     m_trackInfo = info;
-
     if (m_statusBar) {
         m_statusBar->showMessage(m_trackInfo);
         m_statusLabel->setText(m_statusInfo);
@@ -568,12 +548,12 @@ void Player::setTrackInfo(const QString &info)
     }
 }
 
-
-// 更新m_statusInfo成员变量，并根据是否存在状态栏来在状态信息显示位置（状态栏或窗口标题）的信息
+/**
+ * @brief 设置状态信息（加载/缓冲/错误等），显示在状态栏或窗口标题
+ */
 void Player::setStatusInfo(const QString &info)
 {
     m_statusInfo = info;
-
     if (m_statusBar) {
         m_statusBar->showMessage(m_trackInfo);
         m_statusLabel->setText(m_statusInfo);
@@ -585,23 +565,25 @@ void Player::setStatusInfo(const QString &info)
     }
 }
 
-
-// 设置状态信息显示为媒体播放器的错误字符串信息
+/**
+ * @brief 显示错误信息（从播放器获取错误字符串）
+ */
 void Player::displayErrorMessage()
 {
     setStatusInfo(m_player->errorString());
 }
 
-
-// 根据当前播放位置和媒体总时长计算并设置时长信息显示格式
+/**
+ * @brief 更新时间标签：当前时间 / 总时间（格式 mm:ss 或 hh:mm:ss）
+ */
 void Player::updateDurationInfo(qint64 currentInfo)
 {
     QString tStr;
     if (currentInfo || m_duration) {
         QTime currentTime((currentInfo / 3600) % 60, (currentInfo / 60) % 60,
-            currentInfo % 60, (currentInfo * 1000) % 1000);
+                          currentInfo % 60, (currentInfo * 1000) % 1000);
         QTime totalTime((m_duration / 3600) % 60, (m_duration / 60) % 60,
-            m_duration % 60, (m_duration * 1000) % 1000);
+                        m_duration % 60, (m_duration * 1000) % 1000);
         QString format = "mm:ss";
         if (m_duration > 3600)
             format = "hh:mm:ss";
@@ -609,5 +591,3 @@ void Player::updateDurationInfo(qint64 currentInfo)
     }
     m_labelDuration->setText(tStr);
 }
-
-

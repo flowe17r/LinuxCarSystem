@@ -45,7 +45,7 @@ private:
     Ui::Weather *ui;
     QMenu *menuQuit;
     QPoint mOffset; // 偏移值
-    QNetworkReply *reply;
+    QNetworkReply *m_reply = nullptr;
     void parseWeatherJsonData(QByteArray rawData);
     QString strUrl;
     CityCodeUtils cityCodeUtils;

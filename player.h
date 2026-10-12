@@ -50,8 +50,6 @@ public:
     QPushButton *openButton;
     QPushButton *backButton;
     PlayerControls *controls;
-    void player_working();
-    void clearConnections();
 signals:
     // 是否全屏
     void fullScreenChanged(bool fullScreen);

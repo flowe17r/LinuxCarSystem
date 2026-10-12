@@ -4,16 +4,40 @@
 #include "commonhelper.h"
 
 #include <QSslConfiguration>
+#include <QSslSocket>
 #include <QNetworkRequest>
-#include <QNetworkReply>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDebug>
+#include <QFile>
 #include <QVBoxLayout>
 #include <QPixmap>
-#include <QSerialPortInfo>
+
+namespace {
+// GPS 每秒一条 GGA，限流避免弱 CPU + 移动网络被请求打满
+const qint64 kRefreshIntervalMs = 5000;
+const int kRequestTimeoutMs = 10000;
+
+// NMEA 的 ddmm.mmmm 转十进制度
+double toDecimalDegree(double raw)
+{
+    int deg = int(raw / 100);
+    return deg + (raw - deg * 100) / 60.0;
+}
+}
 
 Map::Map(QWidget *parent) : QDialog(parent)
 {
     initUi();
 
+    m_cachePath = QCoreApplication::applicationDirPath() + "/map_cache.png";
+    m_timeout.setSingleShot(true);
+    connect(&m_timeout, &QTimer::timeout, this, [this]() {
+        if (!m_reply)
+            return;
+        m_errorText = QStringLiteral("请求超时(10s)，请检查板子网络与 DNS");
+        m_reply->abort();
+    });
 }
 
 Map::~Map()
@@ -24,13 +48,13 @@ Map::~Map()
 
 void Map::initUi()
 {
-    auto pMovie = new QMovie(this);
-    pMovie->setFileName(":/images/loading.gif");
-    pMovie->start();
-    this->setFixedSize(1024,600);
+    this->setFixedSize(1024, 600);
     m_logoLabel.setObjectName("logoLabel");
-    m_logoLabel.setText(QString("当前展示定位坐标：[") +m_location + "]");
-    m_back = new QPushButton(tr("返回"),this);
+    setStatusText();
+    m_back = new QPushButton(tr("返回"), this);
+
+    // QLabel 接管 QMovie 生命周期（setPixmap/clear 时会销毁它），故不持有裸指针
+    auto pMovie = new QMovie(QStringLiteral(":/images/loading.gif"));
     m_iconLabel.setMovie(pMovie);
     m_iconLabel.setAlignment(Qt::AlignCenter);
     m_logoLabel.setAlignment(Qt::AlignRight);
@@ -40,7 +64,8 @@ void Map::initUi()
     pVLayout->addWidget(&m_logoLabel);
     pVLayout->addWidget(m_back);
     m_iconLabel.setLayout(pVLayout);
-    connect(m_back,&QPushButton::clicked,this,&Map::on_back_clicked);
+    connect(m_back, &QPushButton::clicked, this, &Map::on_back_clicked);
+
     auto *pMainLayout = new QVBoxLayout;
     pMainLayout->addWidget(&m_iconLabel);
     pMainLayout->setMargin(0);
@@ -52,78 +77,179 @@ void Map::initUi()
 void Map::initCtrl()
 {
     initSerialPort();
-
     requestMapImage(m_location);
 }
 
 // 串口初始化
 void Map::initSerialPort()
 {
+    if (m_port.isOpen())
+        return;
+
     // 设置串口名称 (UART6)
     m_port.setPortName("ttymxc5");
     // 以读写方式打开串口设备
-    if(!m_port.open(QIODevice::ReadWrite)) {
-        SimpleMessageBox::infomationMessageBox("未检测到设备，请重试");
-        m_logoLabel.setText(QString("未检测到GPS设备，当前展示定位坐标：[") +m_location + "]");
+    if (!m_port.open(QIODevice::ReadWrite)) {
+        m_noGpsDevice = true;
+        m_hasFix = false;
+        if (!m_gpsWarned) {
+            m_gpsWarned = true;
+            SimpleMessageBox::infomationMessageBox("未检测到GPS设备，使用默认位置");
+        }
+        setStatusText();
         return;
     }
-    // 设置波特率为9600
+
+    m_noGpsDevice = false;
     m_port.setBaudRate(QSerialPort::Baud9600, QSerialPort::AllDirections);
-    // 设置数据位为8位
     m_port.setDataBits(QSerialPort::Data8);
-    // 设置流控制为无流控制模式
     m_port.setFlowControl(QSerialPort::NoFlowControl);
-    // 设置为无校验位
     m_port.setParity(QSerialPort::NoParity);
-    // 设置停止位为1位
     m_port.setStopBits(QSerialPort::OneStop);
-    // readyRead信号是当串口接收到新的数据并且这些数据可以从串口读取时被触发。
-    connect(&m_port, &QSerialPort::readyRead, this, &Map::portReadReady);
+
+    // 只连一次，避免重复进入页面时同一信号触发多次槽
+    if (!m_portConnected) {
+        connect(&m_port, &QSerialPort::readyRead, this, &Map::portReadReady);
+        m_portConnected = true;
+    }
+    setStatusText();
 }
+
 // 请求地图照片
 void Map::requestMapImage(const QString &center)
 {
-    // 构建请求地图图片的URL地址
-    QString url = baidudUrl.arg(baidudAk).arg(center);
+    QString url = tdtStaticUrl.arg(tdtToken).arg(center);
 
-    m_array.clear();
-    // 发出网络请求
-    requestNetwork(url);
+    // 板端 Qt 若没编进 OpenSSL，https 会直接以 "Protocol not available" 失败，
+    // 表现为一直卡在 loading；此时降级为 http（天地图两种协议均可用）
+    if (!QSslSocket::supportsSsl())
+        url.replace("https://", "http://");
+
+    startRequest(url);
 }
 
-void Map::requestNetwork(const QString &url)
+void Map::startRequest(const QString &url)
 {
-    QSslConfiguration config;
-    // 设置对等方验证模式为不进行验证
-    config.setPeerVerifyMode(QSslSocket::VerifyNone);
-    // 设置SSL协议版本为TlsV1_0
-    config.setProtocol(QSsl::TlsV1_0);
+    if (m_reply) {
+        m_reply->abort();
+        m_reply->deleteLater();
+        m_reply = nullptr;
+    }
+    m_array.clear();
+    m_errorText.clear();
 
     QNetworkRequest networkRequest;
-    // 将之前配置好的SSL配置信息设置到网络请求对象中
-    networkRequest.setSslConfiguration(config);
-    // 设置请求地址
+    if (url.startsWith("https")) {
+        QSslConfiguration config = QSslConfiguration::defaultConfiguration();
+        // 板端无 CA 证书 / 系统时间不对时避免握手直接失败
+        config.setPeerVerifyMode(QSslSocket::VerifyNone);
+        networkRequest.setSslConfiguration(config);
+    }
     networkRequest.setUrl(url);
-    // 获取请求返回数据
-    QNetworkReply *newReply = m_networkAccessManager.get(networkRequest);
-    // 当一旦请求到数据时执行netReadyRead
-    connect(newReply, &QNetworkReply::readyRead, this, &Map::netReadyRead);
-    // 网络请求完成后执行deleteLater
-    connect(newReply, &QNetworkReply::finished, newReply, &QNetworkReply::deleteLater);
+
+    qDebug() << "[Map] request:" << url;
+    m_reply = m_networkAccessManager.get(networkRequest);
+    m_timeout.start(kRequestTimeoutMs);
+    connect(m_reply, &QNetworkReply::readyRead, this, &Map::onReadyRead);
+    connect(m_reply, &QNetworkReply::finished, this, &Map::onFinished);
 }
 
-void Map::netReadyRead()
+void Map::onReadyRead()
 {
-    // 使用qobject_cast将发送信号的对象转换为QNetworkReply *类型
     QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    // 追加请求到的数据
-    m_array.append(reply->readAll());
+    if (reply)
+        m_array.append(reply->readAll());
+}
 
-    QPixmap pixmap(m_array);
-    // 从获取的数据构建出有效的QPixmap对象并设置
-    if(pixmap.loadFromData(m_array)) {
-        m_iconLabel.setPixmap(pixmap);
+void Map::onFinished()
+{
+    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+    if (!reply)
+        return;
+
+    m_timeout.stop();
+    if (reply != m_reply) {
+        reply->deleteLater();
+        return;
     }
+    m_reply = nullptr;
+
+    m_array.append(reply->readAll());
+    const QNetworkReply::NetworkError err = reply->error();
+    const QString errString = reply->errorString();
+    reply->deleteLater();
+
+    QPixmap pixmap;
+    if (err == QNetworkReply::NoError)
+        pixmap.loadFromData(m_array);
+
+    if (err != QNetworkReply::NoError || pixmap.isNull()) {
+        QString reason = m_errorText;
+        m_errorText.clear();
+        if (reason.isEmpty()) {
+            if (err != QNetworkReply::NoError) {
+                if (err == QNetworkReply::SslHandshakeFailedError)
+                    reason = QStringLiteral("HTTPS 握手失败（证书/系统时间问题）");
+                else if (err == QNetworkReply::ProtocolUnknownError
+                         || err == QNetworkReply::ContentNotAvailableError
+                         || errString.contains("ssl", Qt::CaseInsensitive))
+                    reason = QStringLiteral("Qt 不支持 HTTPS（缺少 OpenSSL 运行库）");
+                else
+                    reason = errString;
+            } else {
+                reason = QStringLiteral("返回数据无法解码（缺少 PNG 图像插件）");
+            }
+        }
+        qDebug() << "[Map] failed:" << int(err) << errString;
+        showFallback(reason);
+        return;
+    }
+
+    // 服务端已按 markers 参数在中心画出定位针
+    QFile file(m_cachePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(m_array);
+        file.close();
+    }
+    showMap(pixmap, QString());
+}
+
+void Map::showMap(const QPixmap &pixmap, const QString &note)
+{
+    m_iconLabel.setPixmap(pixmap);
+    if (!note.isEmpty())
+        m_logoLabel.setText(note);
+    else
+        setStatusText();
+}
+
+// 网络失败时的兜底：优先显示上次成功缓存的地图，否则给出明确原因，绝不卡在 loading
+void Map::showFallback(const QString &reason)
+{
+    QPixmap cached;
+    if (cached.load(m_cachePath)) {
+        QString note = QStringLiteral("网络异常：%1（显示上次地图）").arg(reason);
+        showMap(cached, note);
+        return;
+    }
+
+    m_iconLabel.clear();  // 销毁 loading 动画
+    m_iconLabel.setText(QStringLiteral("地图加载失败：%1").arg(reason));
+    m_logoLabel.setText(QStringLiteral("%1  [%2]").arg(m_defaultPlace).arg(m_location));
+}
+
+void Map::setStatusText()
+{
+    QString text;
+    if (m_hasFix)
+        text = QStringLiteral("定位成功：") + m_location;
+    else if (m_noGpsDevice)
+        text = QStringLiteral("未检测到GPS设备，展示默认位置：") + m_defaultPlace
+               + QStringLiteral("  [") + m_location + QStringLiteral("]");
+    else
+        text = QStringLiteral("GPS定位中，移动至空旷处；当前展示默认位置：") + m_defaultPlace
+               + QStringLiteral("  [") + m_location + QStringLiteral("]");
+    m_logoLabel.setText(text);
 }
 
 // 读取串口数据
@@ -132,21 +258,28 @@ void Map::portReadReady()
     // 当串口仍有数据
     while (m_port.bytesAvailable()) {
         QString line = m_port.readLine(); // 读取一行
+        if (line.isEmpty())
+            break;
+
         auto location = parseGpsData(line); // 解析GPS数据
-        if (!location.isEmpty()) {
-            m_location = location;
-            line = "定位成功，[" + location + "]";
+        if (location.isEmpty()) {
+            if (!m_hasFix)
+                setStatusText();
+            continue;
+        }
+
+        m_hasFix = true;
+        const bool moved = (location != m_location);
+        m_location = location;
+        setStatusText();
+
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (moved && now - m_lastRequestMs >= kRefreshIntervalMs) {
+            m_lastRequestMs = now;
             requestMapImage(location); // 根据经纬度定位
         }
-        else {
-            line = ("定位中... 请尝试移到空旷位置，展示坐标 [" + m_location + "]");
-        }
-
-        m_logoLabel.setText(line);
     }
 }
-
-
 
 void Map::map_working()
 {
@@ -158,46 +291,46 @@ void Map::map_working()
 
 void Map::on_back_clicked()
 {
+    m_timeout.stop();
+    if (m_reply) {
+        m_reply->abort();
+        m_reply->deleteLater();
+        m_reply = nullptr;
+    }
+    if (m_port.isOpen())
+        m_port.close();
+
     emit backout();
 }
+
 // 解析GPS数据
 QString Map::parseGpsData(const QString &data)
 {
-    QString ret;
-    // 过滤无效信息
-    if (data.contains(",,,,,"))
-        return ret;
-    // 去除输入数据字符串两端的空白字符后，按照逗号进行分割
     auto list = data.trimmed().split(',');
-    if (list.count() != 15)
-        return ret;
+    // $GPGGA 至少要有到定位质量/经纬度的字段
+    if (list.count() < 9)
+        return QString();
     // 判断是否为 GGA 定位语句（支持 $GPGGA / $GNGGA / $BDGGA 等）
     if (!list.at(0).contains("GGA"))
-        return ret;
+        return QString();
     // 定位质量为 0 表示无效
     if (list.at(6).toInt() == 0)
-        return ret;
-    // 保存原始经度数据
-    bool ok;
-    auto e = list.at(4).toDouble(&ok);
-    if (!ok)
-        return ret;
-    // 保存原始纬度数据
-    auto n = list.at(2).toDouble(&ok);
-    if (!ok)
-        return ret;
-    // 计算经度的整数部分
-    int i = e / 100;
-    // 计算经度的小数部分
-    double j = (e / 100  - i) * 100 / 60.0;
-    // 拼接并保留6位小数
-    ret = QString::number(i+j, 'f', 6);
-    // 计算纬度的整数部分
-    i = n / 100;
-    // 计算纬度的小数部分
-    j = (n / 100  - i) * 100 / 60.0;
-    // 将经纬度拼接
-    ret = ret + ',' + QString::number(i+j, 'f', 6);
+        return QString();
 
-    return ret;
+    bool ok = false;
+    double lon = list.at(4).toDouble(&ok); // 经度 ddmm.mmmm
+    if (!ok)
+        return QString();
+    double lat = list.at(2).toDouble(&ok); // 纬度 ddmm.mmmm
+    if (!ok)
+        return QString();
+
+    lon = toDecimalDegree(lon);
+    lat = toDecimalDegree(lat);
+    if (list.at(5).compare("W", Qt::CaseInsensitive) == 0)
+        lon = -lon;
+    if (list.at(7).compare("S", Qt::CaseInsensitive) == 0)
+        lat = -lat;
+
+    return QString::number(lon, 'f', 6) + ',' + QString::number(lat, 'f', 6);
 }

@@ -25,6 +25,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += \
     Audio.cpp \
     buzzer.cpp \
+    camera.cpp \
     citycodeutils.cpp \
     day.cpp \
     dht11.cpp \
@@ -38,14 +39,18 @@ SOURCES += \
     playercontrols.cpp \
     playlistmodel.cpp \
     rotatablewidget.cpp \
+    settingspage.cpp \
     simplemessagebox.cpp \
+    speedgauge.cpp \
     sr04.cpp \
+    v4l2capture.cpp \
     videowidget.cpp \
     weather.cpp
 
 HEADERS += \
     Audio.h \
     buzzer.h \
+    camera.h \
     citycodeutils.h \
     commonhelper.h \
     day.h \
@@ -59,8 +64,11 @@ HEADERS += \
     playercontrols.h \
     playlistmodel.h \
     rotatablewidget.h \
+    settingspage.h \
     simplemessagebox.h \
+    speedgauge.h \
     sr04.h \
+    v4l2capture.h \
     videowidget.h \
     weather.h
 

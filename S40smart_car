@@ -1,0 +1,79 @@
+#!/bin/sh
+# Smart_car 开机自启 — 放在 /etc/init.d/S40smart_car
+# 序号 40：在 S105 联网、S106 adb 之前启动，界面先出来
+# 部署: chmod +x /etc/init.d/S40smart_car
+# 若已有 S107smart_car: rm /etc/init.d/S107smart_car
+
+APP=/root/Smart_in-car_entertainment
+PIDFILE=/var/run/smart_car.pid
+LOG=/tmp/smart_car.log
+DHT11_KO=/root/dht11_drv.ko
+
+wait_fb() {
+	i=0
+	while [ ! -e /dev/fb0 ] && [ $i -lt 15 ]; do
+		sleep 1
+		i=$((i + 1))
+	done
+}
+
+start() {
+	printf "Starting Smart_car: "
+
+	wait_fb
+
+	insmod "$DHT11_KO" >>"$LOG" 2>&1
+
+	export QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
+	export QT_QPA_FONTDIR=/usr/lib/fonts/
+	export QT_QPA_GENERIC_PLUGINS=tslib:/dev/input/event1
+	export TSLIB_TSDEVICE=/dev/input/event1
+	export TSLIB_CALIBFILE=/etc/pointercal
+	export TSLIB_CONFFILE=/etc/ts.conf
+	export TSLIB_PLUGINDIR=/usr/lib/ts
+	export TSLIB_FBDEVICE=/dev/fb0
+	export XDG_RUNTIME_DIR=/tmp/runtime-root
+	export TZ=CST-8
+	mkdir -p "$XDG_RUNTIME_DIR"
+
+	if [ ! -x "$APP" ]; then
+		echo "FAIL (missing $APP)"
+		return 1
+	fi
+
+	# 已在运行则跳过
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "already running"
+		return 0
+	fi
+
+	cd /root || return 1
+	"$APP" >>"$LOG" 2>&1 &
+	echo $! >"$PIDFILE"
+
+	sleep 1
+	if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "OK (pid $(cat $PIDFILE))"
+	else
+		echo "FAIL (see $LOG)"
+		return 1
+	fi
+}
+
+stop() {
+	printf "Stopping Smart_car: "
+	if [ -f "$PIDFILE" ]; then
+		kill "$(cat "$PIDFILE")" 2>/dev/null
+		rm -f "$PIDFILE"
+	fi
+	killall Smart_in-car_entertainment 2>/dev/null
+	echo "OK"
+}
+
+case "$1" in
+	start)   start ;;
+	stop)    stop ;;
+	restart) stop; sleep 1; start ;;
+	*) echo "Usage: $0 {start|stop|restart}"; exit 1 ;;
+esac
+exit 0

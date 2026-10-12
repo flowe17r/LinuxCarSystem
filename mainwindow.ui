@@ -10,6 +10,12 @@
     <height>600</height>
    </rect>
   </property>
+  <property name="minimumSize">
+   <size>
+    <width>1024</width>
+    <height>600</height>
+   </size>
+  </property>
   <property name="maximumSize">
    <size>
     <width>1024</width>
@@ -17,227 +23,530 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>车载终端</string>
   </property>
   <property name="styleSheet">
    <string notr="true">
-QMainWindow { border-image: url(:/images/1.jpg); }</string>
+QMainWindow, QWidget#centralwidget {
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 #e8f4ff, stop:1 #f4f8fc);
+}
+QFrame#infoCard1, QFrame#infoCard2, QFrame#infoCard3, QFrame#infoCard4, QFrame#gaugeCard {
+  background-color: #ffffff;
+  border: 1px solid #dbe7f3;
+  border-radius: 14px;
+}
+QToolButton#btnSettings, QToolButton#btnCamera {
+  background-color: #ffffff;
+  border: 1px solid #dbe7f3;
+  border-radius: 16px;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px;
+}
+QToolButton#btnSettings:pressed, QToolButton#btnCamera:pressed {
+  background-color: #e0f2fe;
+}
+QLabel#titleStatus, QLabel#titleSpeed, QLabel#titleBattery, QLabel#titleOdo {
+  color: #64748b; font-size: 12px;
+}
+QLabel#labelSpeed, QLabel#labelBattery, QLabel#labelOdo {
+  color: #0f172a; font-size: 20px; font-weight: bold;
+}
+QLabel#footerLabel, QLabel#datelable, QLabel#timelable { color: #64748b; font-size: 13px; }
+</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QPushButton" name="pushButton">
-    <property name="geometry">
-     <rect>
-      <x>40</x>
-      <y>300</y>
-      <width>261</width>
-      <height>201</height>
-     </rect>
+   <layout class="QVBoxLayout" name="rootLayout">
+    <property name="spacing">
+     <number>10</number>
     </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { border-image: url(:/images/Video1.png) }
-</string>
+    <property name="leftMargin">
+     <number>16</number>
     </property>
-    <property name="text">
-     <string/>
+    <property name="topMargin">
+     <number>12</number>
     </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_2">
-    <property name="geometry">
-     <rect>
-      <x>360</x>
-      <y>290</y>
-      <width>280</width>
-      <height>260</height>
-     </rect>
+    <property name="rightMargin">
+     <number>16</number>
     </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { border-image: url(:/images/Music.png) }</string>
+    <property name="bottomMargin">
+     <number>8</number>
     </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_3">
-    <property name="geometry">
-     <rect>
-      <x>710</x>
-      <y>290</y>
-      <width>280</width>
-      <height>260</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { border-image: url(:/images/Weather.png) }</string>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_4">
-    <property name="geometry">
-     <rect>
-      <x>710</x>
-      <y>30</y>
-      <width>251</width>
-      <height>211</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { border-image: url(:/images/environment.png) }</string>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_5">
-    <property name="geometry">
-     <rect>
-      <x>360</x>
-      <y>10</y>
-      <width>280</width>
-      <height>260</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { border-image: url(:/images/gps.png) }</string>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QLabel" name="timelable">
-    <property name="geometry">
-     <rect>
-      <x>130</x>
-      <y>80</y>
-      <width>161</width>
-      <height>51</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 75 20pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);</string>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QLabel" name="datelable">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>160</y>
-      <width>321</width>
-      <height>51</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 75 20pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);
-</string>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label">
-    <property name="geometry">
-     <rect>
-      <x>120</x>
-      <y>520</y>
-      <width>91</width>
-      <height>21</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 10pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);</string>
-    </property>
-    <property name="text">
-     <string>视频播放器</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_2">
-    <property name="geometry">
-     <rect>
-      <x>450</x>
-      <y>520</y>
-      <width>91</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 10pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);</string>
-    </property>
-    <property name="text">
-     <string>音乐播放器</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_3">
-    <property name="geometry">
-     <rect>
-      <x>820</x>
-      <y>520</y>
-      <width>91</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 10pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);</string>
-    </property>
-    <property name="text">
-     <string>天气预报</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_4">
-    <property name="geometry">
-     <rect>
-      <x>800</x>
-      <y>260</y>
-      <width>91</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">font: 10pt &quot;Agency FB&quot;;
-color: rgb(255, 255, 255);</string>
-    </property>
-    <property name="text">
-     <string>环境检测</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_5">
-    <property name="geometry">
-     <rect>
-      <x>480</x>
-      <y>260</y>
-      <width>71</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">color: rgb(255, 255, 255);
-font: 10pt &quot;Algerian&quot;;</string>
-    </property>
-    <property name="text">
-     <string>GPS定位</string>
-    </property>
-   </widget>
+    <item>
+     <layout class="QHBoxLayout" name="topRow">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="infoCard1">
+        <property name="minimumHeight">
+         <number>68</number>
+        </property>
+        <layout class="QVBoxLayout" name="statusCardLayout">
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>8</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="titleStatus">
+           <property name="text">
+            <string>系统状态</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelSysStatus">
+           <property name="styleSheet">
+            <string notr="true">color: #16a34a; font-size: 20px; font-weight: bold;</string>
+           </property>
+           <property name="text">
+            <string>正常运行</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="infoCard2">
+        <property name="minimumHeight">
+         <number>68</number>
+        </property>
+        <layout class="QVBoxLayout" name="speedCardLayout">
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>8</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="titleSpeed">
+           <property name="text">
+            <string>当前速度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelSpeed">
+           <property name="text">
+            <string>85 km/h</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="infoCard3">
+        <property name="minimumHeight">
+         <number>68</number>
+        </property>
+        <layout class="QVBoxLayout" name="batteryCardLayout">
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>8</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="titleBattery">
+           <property name="text">
+            <string>剩余电量</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelBattery">
+           <property name="text">
+            <string>65%</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="infoCard4">
+        <property name="minimumHeight">
+         <number>68</number>
+        </property>
+        <layout class="QVBoxLayout" name="odoCardLayout">
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>8</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="titleOdo">
+           <property name="text">
+            <string>总里程</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelOdo">
+           <property name="text">
+            <string>12,345 km</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="middleRow">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QToolButton" name="btnSettings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>220</width>
+          <height>220</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>系统设置
+点击进入</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/sunrise.png</normaloff>:/images/sunrise.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>56</width>
+          <height>56</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="gaugeCard">
+        <property name="minimumSize">
+         <size>
+          <width>280</width>
+          <height>240</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="gaugeLayout">
+         <property name="leftMargin">
+          <number>6</number>
+         </property>
+         <property name="topMargin">
+          <number>6</number>
+         </property>
+         <property name="rightMargin">
+          <number>6</number>
+         </property>
+         <property name="bottomMargin">
+          <number>6</number>
+         </property>
+         <item>
+          <widget class="SpeedGauge" name="speedGauge" native="true"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="btnCamera">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>220</width>
+          <height>220</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>倒车影像
+点击进入</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/car.png</normaloff>:/images/car.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>56</width>
+          <height>56</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="navRow">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QToolButton" name="pushButton_2">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>86</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color:white; border:none; border-radius:14px; background-color:#3b82f6; font-size:15px; font-weight:bold;</string>
+        </property>
+        <property name="text">
+         <string>音乐播放</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/Music.png</normaloff>:/images/Music.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="pushButton">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>86</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color:white; border:none; border-radius:14px; background-color:#22c55e; font-size:15px; font-weight:bold;</string>
+        </property>
+        <property name="text">
+         <string>视频播放</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/Video1.png</normaloff>:/images/Video1.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="pushButton_3">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>86</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color:white; border:none; border-radius:14px; background-color:#f59e0b; font-size:15px; font-weight:bold;</string>
+        </property>
+        <property name="text">
+         <string>天气预报</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/Weather.png</normaloff>:/images/Weather.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="pushButton_5">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>86</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color:white; border:none; border-radius:14px; background-color:#ef4444; font-size:15px; font-weight:bold;</string>
+        </property>
+        <property name="text">
+         <string>地图导航</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/gps.png</normaloff>:/images/gps.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="pushButton_4">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>86</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color:white; border:none; border-radius:14px; background-color:#2563eb; font-size:15px; font-weight:bold;</string>
+        </property>
+        <property name="text">
+         <string>环境监测</string>
+        </property>
+        <property name="icon">
+         <iconset resource="res.qrc">
+          <normaloff>:/images/environment.png</normaloff>:/images/environment.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="footerRow">
+      <item>
+       <widget class="QLabel" name="footerLabel">
+        <property name="text">
+         <string>状态: 车载终端启动完成</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="datelable">
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="timelable">
+        <property name="minimumWidth">
+         <number>90</number>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
+   <property name="visible">
+    <bool>false</bool>
+   </property>
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
      <width>1024</width>
-     <height>26</height>
+     <height>0</height>
     </rect>
    </property>
+   <property name="maximumHeight">
+    <number>0</number>
+   </property>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="visible">
+    <bool>false</bool>
+   </property>
+   <property name="maximumHeight">
+    <number>0</number>
+   </property>
+  </widget>
  </widget>
- <resources/>
+ <customwidgets>
+  <customwidget>
+   <class>SpeedGauge</class>
+   <extends>QWidget</extends>
+   <header>speedgauge.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources>
+  <include location="res.qrc"/>
+ </resources>
  <connections/>
 </ui>

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Smart_in-car_entertainment
 
 基于 **Qt5** 的嵌入式 Linux 车载娱乐系统，面向 **1024×600** 触摸屏开发板（已在 **100ASK IMX6ULL Pro** 上验证）。主界面提供天气、音乐、视频、环境监控与 GPS 地图五个功能模块。
@@ -14,7 +13,7 @@
 | **音乐** | 扫描本地 MP3，支持 LRC 歌词同步、唱片旋转动画、播放列表 |
 | **视频** | 基于 Qt Multimedia 的本地视频播放，支持播放列表与 SQLite 记录 |
 | **环境监控** | 读取温湿度（DHT11）；SR04 / MQ135 / LED / 蜂鸣器为可选，当前配置未使用 |
-| **GPS 地图** | ATGM336H 经 `ttymxc5` 读取 NMEA，调用百度静态地图 API 显示当前位置 |
+| **GPS 地图** | ATGM336H 经 `ttymxc5` 读取 NMEA，调用天地图静态地图 API 显示当前位置 |
 
 ---
 
@@ -32,10 +31,15 @@
 |------|------|-----------------|------|
 | **温湿度** | DHT11| `/dev/mydht11` | 需加载 `dht11_drv` 内核驱动；DATA 接 **GPIO4_IO19**（Linux GPIO **115**） |
 | **GPS** | ATGM336H | `/dev/ttymxc5`（UART6） | **9600** 8N1，NMEA **`$GPGGA`**；模块 **TX → 板子 RX**；室外或靠窗定位 |
-gps:VCC 开发板3.3V 
-    gnd       gnd 
-    TX        uart6_rx
-    RX        uart6_tx
+
+gps 接线：
+
+```
+gps:VCC   开发板 3.3V
+    gnd   gnd
+    TX    uart6_rx
+    RX    uart6_tx
+```
 
 #### 未配置 / 可选外设
 
@@ -158,7 +162,14 @@ cd /root
 
 ### 开机自启（可选）
 
-可编写 `/etc/init.d/S107smart_car` 启动脚本，并在网络就绪（WiFi 或 eth1 配好 IP、DNS）后再启动程序，以便天气模块能正常联网、系统时间已校时。
+仓库根目录的 `S40smart_car` 即开机自启脚本，部署到板端 `/etc/init.d/S40smart_car` 并 `chmod +x`：
+
+```bash
+scp S40smart_car root@板子IP:/etc/init.d/S40smart_car
+ssh root@板子IP "chmod +x /etc/init.d/S40smart_car"
+```
+
+序号 40 使界面在联网（`S105network`）之前先起来；若板上有旧的 `S107smart_car`，删掉以免重复启动。
 
 ---
 
@@ -184,14 +195,17 @@ cd /root
 
 ### 环境监控
 
-- **当前硬件**：DHT11 → `/dev/mydht11`（需要修改设备树，在linux重新编译设备树，然后传到开发板/boot/下）
+- **当前硬件**：DHT11 → `/dev/mydht11`（需要修改设备树，在 linux 重新编译设备树，然后传到开发板 `/boot/` 下）
 - 温湿度在「硬件监控」页显示；未接 SR04 / MQ135 等时，距离与空气质量相关控件无效，终端可能有 open 失败日志
 
 ### GPS 地图
 
 - **当前硬件**：ATGM336H → `/dev/ttymxc5`，9600 8N1
-- 默认坐标：`118.804341,31.975024`（无定位时使用）
-- 串口收到有效 `$GPGGA` 后自动更新位置；需联网加载百度静态地图（`map.h` 中配置 AK）
+- 地图服务：**[天地图](https://console.tianditu.gov.cn) 静态图 API**，Key（`tk`）配置在 `map.h` 的 `tdtToken`
+- 坐标系：天地图为 CGCS2000（≈WGS84），与 NMEA 解析输出一致，**无需 GCJ-02/BD-09 转换**
+- 默认坐标：`121.5722919,31.1241443`（**上海市浦东新区周浦镇公元新村**，室内无定位时使用）
+- 串口收到有效 `$GPGGA` 后自动更新位置；需联网加载天地图静态地图
+- 注意天地图 `zoom` 与百度相反：**数字越大范围越广**（当前取 16）
 - 室内信号弱时可把模块放到窗外，或使用外置有源 GPS 天线
 
 ---
@@ -206,7 +220,8 @@ cd /root
 | 天气不更新 | 无网络或未校时 | 检查 WiFi/有线、DNS、`ntpdate` |
 | `fail to open /dev/mysr04` 等 | 未接 SR04/MQ135/LED 等（当前配置） | 可忽略；仅使用 DHT11 + GPS 时属正常 |
 | `fail to open /dev/mydht11` | DHT11 驱动未加载或接线错误 | `insmod dht11_drv.ko`，检查 GPIO 与扩展板 |
-| GPS 无数据 / 地图不更新 | 室内无星号或未接 UART5 | `cat /dev/ttymxc5` 测 NMEA；板子需能上网 |
+| GPS 无数据 / 地图不更新 | 室内无星号或未接 UART6 | `cat /dev/ttymxc5` 测 NMEA；板子需能上网 |
+| 地图一片空白 | 天地图 `tk` 失效或额度用尽 | 到天地图控制台检查 Key；程序内仅显示默认坐标 |
 | adb 不可用 | USB gadget 启动失败 | 使用 `scp` / `ssh` 传文件 |
 
 ---
@@ -221,8 +236,4 @@ cd /root
 
 ## 许可证
 
-本项目为开源车载娱乐系统示例代码，具体许可证以仓库说明为准。第三方 API（易客天气、百度地图）请遵守各自服务条款。
-=======
-# LinuxCarSystem
-Qt5-based embedded Linux in-car entertainment system with weather, music, video, environment monitoring and GPS map modules.
->>>>>>> 5cb771f424edc42b6be864640785459e59cecd9a
+本项目为开源车载娱乐系统示例代码，具体许可证以仓库说明为准。第三方 API（易客天气、天地图）请遵守各自服务条款。

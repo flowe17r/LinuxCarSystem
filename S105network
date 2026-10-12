@@ -1,0 +1,77 @@
+#!/bin/sh
+# WiFi 联网 — 后台执行，不阻塞后续 init 脚本
+# 替换板子上 /etc/init.d/S105network
+
+WIFI_SSID="DingYang"
+WIFI_PASS="88888888"
+WIFI_IP="192.168.8.101"
+WIFI_GW="192.168.8.1"
+WIFI_MASK="255.255.255.0"
+LOG=/tmp/network.log
+
+log() { echo "$(date '+%H:%M:%S') $1" >> "$LOG"; }
+
+write_wpa_conf() {
+	cat > /etc/wpa_supplicant.conf << WPAEOF
+ctrl_interface=/var/run/wpa_supplicant
+network={
+    ssid="$WIFI_SSID"
+    psk="$WIFI_PASS"
+    key_mgmt=WPA-PSK
+    bssid=dc:65:55:14:43:64
+}
+WPAEOF
+}
+
+set_static_ip() {
+	ifconfig wlan0 down 2>/dev/null
+	sleep 1
+	ifconfig wlan0 up
+	ifconfig wlan0 "$WIFI_IP" netmask "$WIFI_MASK" up
+	route del default 2>/dev/null
+	route add default gw "$WIFI_GW" dev wlan0
+	echo "nameserver 114.114.114.114" > /etc/resolv.conf
+	echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+}
+
+wifi_connect() {
+	log "=== wifi start ==="
+
+	sleep 3
+	killall udhcpc wpa_supplicant 2>/dev/null
+	ifconfig wlan1 down 2>/dev/null
+
+	write_wpa_conf
+	ifconfig wlan0 up
+	wpa_supplicant -B -iwlan0 -c /etc/wpa_supplicant.conf -f /tmp/wpa.log
+
+	i=0
+	while [ $i -lt 20 ]; do
+		iw dev wlan0 link 2>/dev/null | grep -q "Connected" && break
+		sleep 1
+		i=$((i + 1))
+	done
+
+	iw dev wlan0 set power_save off 2>/dev/null
+	set_static_ip
+	log "done: $(ifconfig wlan0 | grep 'inet addr')"
+
+	ping -c 1 -W 2 "$WIFI_GW" >/dev/null 2>&1 && \
+		ntpdate -u ntp.aliyun.com >>"$LOG" 2>&1
+}
+
+case "$1" in
+start)
+	log "=== S105 dispatch (background) ==="
+	wifi_connect &
+	;;
+stop)
+	killall udhcpc wpa_supplicant 2>/dev/null
+	;;
+restart)
+	$0 stop
+	sleep 1
+	$0 start
+	;;
+esac
+exit 0

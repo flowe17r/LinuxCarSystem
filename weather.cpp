@@ -5,7 +5,6 @@
 #include <QDebug>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QMessageBox>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -96,23 +95,24 @@ Weather::Weather(QWidget *parent)
     ui->widget0404->installEventFilter(this);
     ui->widget0405->installEventFilter(this);
 
-
-
+    manager = new QNetworkAccessManager(this);
+    connect(manager, &QNetworkAccessManager::finished, this, &Weather::readHttpRply);
+    connect(ui->back, &QPushButton::clicked, this, &Weather::on_back_clicked);
 }
 void Weather::weather_working()
 {
-    // 由QNetworkAccessManager发起get请求
-    manager = new QNetworkAccessManager(this);
-    //strUrl = "http://v1.yiketianqi.com/api?unescape=1&version=v63&appid=71755637&appsecret=cxCm8AxT";
-    strUrl = "http://v1.yiketianqi.com/api?unescape=1&version=v9&appid=71755637&appsecret=cxCm8AxT";
-    //strUrl = "http://v1.yiketianqi.com/api?unescape=1&version=v9&appid=26371314&appsecret=qOhoD413";
+    if (!manager)
+        return;
 
-    QUrl urlTianQi(strUrl);
-    // 指定请求的url地址
-    QNetworkRequest res(urlTianQi);
-    reply = manager->get(res);
-    // 网络请求后进行数据读取
-    connect(manager,&QNetworkAccessManager::finished,this,&Weather::readHttpRply);
+    if (m_reply) {
+        m_reply->abort();
+        m_reply->deleteLater();
+        m_reply = nullptr;
+    }
+    //易客天气
+    strUrl = "http://v1.yiketianqi.com/api?unescape=1&version=v9&appid=71755637&appsecret=cxCm8AxT";
+    // 发起GET请求（非阻塞，立即返回）
+    m_reply = manager->get(QNetworkRequest(QUrl(strUrl)));
 }
 Weather::~Weather()
 {
@@ -389,30 +389,28 @@ void Weather::drawTempLineLow()
 // 读取数据
 void Weather::readHttpRply(QNetworkReply *reply)
 {
-    // 获取返回码 获取从HTTP服务器接收到的HTTP状态码 2xx:成功状态码 4xx：客户端错误状态码 5xx:服务端错误状态码
-    int resCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if(reply->error() == QNetworkReply::NoError && resCode == 200){
-        // 从设备中读取所有剩余数据，并将其作为字节数组返回。
-        QByteArray data = reply->readAll();
-        //parseWeatherJsonData(data);
-        // 解析数据
-        parseWeatherJsonDataNew(data);
-        qDebug() << QString::fromUtf8(data);
-    }else{
-        //qDebug() << "请求失败:" << reply->errorString();
-        QMessageBox mes;
-        mes.setWindowTitle("错误");
-        mes.setText("网络请求失败");
-        mes.setStyleSheet("QPushButton {color:red}");
-        mes.setStandardButtons(QMessageBox::Ok);
-        mes.exec();
+    if (!reply)
+        return;
+    reply->deleteLater();
+    if (reply == m_reply)
+        m_reply = nullptr;
 
+    const int resCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (reply->error() == QNetworkReply::NoError && resCode == 200) {
+        parseWeatherJsonDataNew(reply->readAll());
+    } else {
+        qDebug() << "weather request fail:" << reply->errorString();
+        ui->labelCity->setText(QStringLiteral("网络请求失败，点返回重试"));
     }
-
 }
 
 
 void Weather::on_back_clicked()
 {
+    if (m_reply) {
+        m_reply->abort();
+        m_reply->deleteLater();
+        m_reply = nullptr;
+    }
     emit this->back();
 }
