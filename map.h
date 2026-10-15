@@ -6,11 +6,14 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QMovie>
+#include <QPoint>
 #include <QSerialPort>
 #include <QByteArray>
 #include <QPushButton>
 #include <QString>
 #include <QTimer>
+
+class QMouseEvent;
 
 class Map : public QDialog
 {
@@ -18,11 +21,12 @@ class Map : public QDialog
 
     // 天地图 Key，在 https://console.tianditu.gov.cn 申请（百度 AK 已停用，改用天地图）
     const QString tdtToken = "83beac5e0b4fe9d015773d84adc0aaaa";
-    // 天地图静态图接口：%1 = tk，%2 = "经度,纬度"（同时作为中心点与标记点）
-    // markers 由服务端画出定位针；若板端 Qt 无 OpenSSL，会降级成 http 请求
+    // 天地图静态图接口：%1 = tk，%2 = 视图中心"经度,纬度"，%3 = zoom，%4 = 定位标记点
+    // markers 传定位点而非中心点：平移后红针仍留在用户所在位置；
+    // 若板端 Qt 无 OpenSSL，会降级成 http 请求
     const QString tdtStaticUrl =
         "https://api.tianditu.gov.cn/staticimage?tk=%1&center=%2&width=1024&height=600"
-        "&zoom=16&markers=%2";
+        "&zoom=%3&markers=%4";
 
 public:
     explicit Map(QWidget *parent = nullptr);
@@ -34,10 +38,21 @@ private:
     void initSerialPort();
     void requestMapImage(const QString &center);
     void startRequest(const QString &url);
+    void retryWithHttp();
+    QString buildUrl(const QString &center, bool https) const;
+    void panBy(const QPoint &pixelDelta);
+    void zoomBy(int step);
+    void recenter();
+    QString shortErrorText(QNetworkReply::NetworkError err) const;
     void showMap(const QPixmap &pixmap, const QString &note);
     void showFallback(const QString &reason);
     void setStatusText();
     QString parseGpsData(const QString &data);
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
 
 private slots:
     void onReadyRead();
@@ -54,6 +69,10 @@ private:
     QLabel m_iconLabel;
     QLabel m_logoLabel;
     QPushButton* m_back;
+    QPushButton* m_zoomIn;
+    QPushButton* m_zoomOut;
+    QPushButton* m_recenter;
+    QLabel* m_busyLabel;
     QByteArray m_array;
     QNetworkAccessManager m_networkAccessManager;
     QNetworkReply *m_reply = nullptr;
@@ -62,6 +81,15 @@ private:
     QString m_errorText;
     QString m_cachePath;
     qint64 m_lastRequestMs = 0;
+    bool m_httpRetried = false;
+    bool m_lastUrlWasHttps = false;
+    // 交互状态：zoom 级别、是否被用户拖动/缩放偏离定位点、拖动起点
+    int m_zoom = 16;
+    bool m_userMoved = false;
+    bool m_dragging = false;
+    QPoint m_dragStart;
+    // 最近一次 GPS 定位（或默认位置），用于"回定位"
+    QString m_fixLocation = QString("121.5722919,31.1241443");
     bool m_gpsWarned = false;
     bool m_portConnected = false;
     bool m_hasFix = false;

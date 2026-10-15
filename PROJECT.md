@@ -49,7 +49,7 @@ main.cpp
   └── MainWindow（1024×600 无边框主页）
         ├── 点击入口 → show 对应 QWidget / QDialog，hide 主页
         ├── 子页 emit back / back1 / backout → 再 show 主页
-        ├── Weather / Player / Audio 曾 moveToThread（含界面的 QWidget 移线程并不规范，改动需谨慎）
+        ├── Weather / Audio 曾 moveToThread（含界面的 QWidget 移线程并不规范；Player 已于 2026-10-12 移除线程化）
         ├── Camera、SettingsPage 懒加载（第一次点击才 new）
         └── 倒车影像采集在 V4L2Capture(QThread)，禁止在 UI 线程里 ioctl/DQBUF
 ```
@@ -79,9 +79,15 @@ main.cpp
 ### 4.3 视频 `Player`
 
 - 本地视频，默认目录 `Videos/`（`.mp4` / `.mkv` / `.avi`）
-- 播放列表写入 SQLite：`media_player.db` 表 `video`
-- 无 `player_working()`，主页点击后直接 `show`
-- 返回：`back()`
+- 播放列表写入 SQLite：`media_player.db` 表 `video`（只存**不含扩展名的文件名**，查找时按 `.mp4`→`.mkv`→`.avi` 顺序拼路径）
+- `Open` 按钮用后缀名过滤（`setNameFilters`），**不要用 `m_player->supportedMimeTypes()` 做过滤器**：SDK 的 ffmpeg 插件上报的 MIME 表不全，会把 mp4 隐藏掉导致"点了没反应"
+- 全屏为**布局级自管**（`toggleFullScreen`/`setFullScreenUi`）：隐藏播放列表、Open/Back、控制面板、进度条行，并把 `layout()->setContentsMargins(0,0,0,0)`+`setSpacing(0)`（进入前把原边距存进 `m_savedMargins`，退出时恢复），使视频铺满整 1024×600。**不用 `QVideoWidget::setFullScreen`**（顶层窗口在 linuxfb 上退不回来）
+- 全屏退出入口三条：① **单击视频** → 右上角浮出子控件按钮 `m_exitFullButton`（父控件是 `m_videoWidget`，`raise()` 叠在画面上，3s `QTimer::singleShot` 自动隐藏）；② 双击视频；③ ESC（`Player::keyPressEvent`）。非全屏时单击被 `m_isFullScreen` 判断挡掉，无副作用
+- 单击/双击信号来自 `videowidget.*`：`VideoWidget::clicked()`、`VideoWidget::doubleClicked()`，全部由 `Player` 决定行为；`mouseDoubleClickEvent` **不得**再调 `setFullScreen`
+- 进度条/音量均**松手才提交**（`sliderReleased`），避免软解板上连续 seek 卡顿；副作用：全屏时进度条隐藏，要拖进度得先退出全屏
+- 无 `player_working()`，主页点击后直接 `show`（Player 不再 moveToThread）
+- 返回：`back()`；`backout()` 会先退出全屏再停播归零
+- **性能上限**（IMX6ULL 单核 A7、无 VPU，ffmpeg 纯软解）：板端只能流畅播 ≤640×360、H.264 **baseline**、≤30fps 的片子。1080p 素材在板上是"PPT 级"卡顿，属硬件上限，不是代码 bug。转码模板见 §7.1
 
 ### 4.4 环境监控 `Hardware`
 
@@ -100,10 +106,11 @@ main.cpp
 - 联网拉**天地图**静态地图（Key `tk` 写在 `map.h`；百度 AK 已停用故废弃）
 - 天地图为 CGCS2000（≈WGS84），与 NMEA 解析输出同源，**无需 GCJ-02/BD-09 转换**
 - 室内无定位时用默认坐标 **上海市浦东新区公元新村**（WGS84 `121.5722919,31.1241443`，天地图直接用）
-- 静态图 URL 带 `markers=<中心坐标>`，定位针由天地图服务端绘制（已实测返回 1024×600 PNG 含红针）
+- 静态图 URL：`center=<视图中心>`、`markers=<定位点>`、`zoom=<级别>`；定位针由天地图服务端绘制，平移后针留在定位点而非屏幕中心
 - 请求带 10s 超时与错误处理；板端 Qt 若无 OpenSSL（`QSslSocket::supportsSsl()` 为假）自动降级 `http://`
 - 成功后把图片缓存到 `应用程序目录/map_cache.png`；再次失败时显示上次地图并在底栏给出原因，不会卡在 loading
 - 定位成功后按 5s 节流刷新地图，避免 GGA 每秒一条打满弱 CPU
+- 交互：触摸屏拖动平移（松手按 Web Mercator 像素→经纬度换算重新请求）、右上 `+`/`-` 缩放（zoom 3–18）、`回定位` 恢复跟随 GPS/默认点；用户拖动后 GPS 不再拽走视图
 - 入口：`map_working()`；返回：`backout()`（返回时停请求并关闭串口）
 - `Map` 是 `QDialog`
 
@@ -190,6 +197,40 @@ cd /root
 
 部署建议同目录：可执行文件、`myMusic/`、`Videos/`，首次运行生成 `media_player.db`；拍照生成 `Photos/`。
 
+### 7.1 视频性能调优（板端实测结论，2026-10-12）
+
+> 原理：视频文件是压缩数据，**每次播放都在板端现场逐帧软解码**，转码不等于预解码。IMX6ULL 无 VPU，
+> 解码成本只能靠素材规格压低：分辨率小、帧率低、baseline（无 B 帧）、或改用帧内编码的 MJPEG。
+
+1. **锁频**（板端执行；原理：往 cpufreq 的 `scaling_governor` 虚拟文件写入策略名，`performance` = CPU 恒定 792MHz 满频，默认策略降频后升频不及时会加剧软解卡顿。**重启失效**）：
+   ```sh
+   echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+   ```
+   持久化（一次执行，写入 `/etc/profile`，串口/SSH 登录时自动生效；若程序改为开机自启则应放 `/etc/init.d/` 启动脚本）：
+   ```sh
+   echo 'echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor' >> /etc/profile
+   ```
+   验证：
+   ```sh
+   cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor   # performance
+   cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq   # 792000 (kHz)
+   ```
+   瓶颈定位：播放时 `top -b -n 1 | head -15` 看进程 `%CPU`（2026-10-12 板端实测：原 1080p 素材满载变 PPT，低配素材流畅）。
+2. **在 PC/虚拟机转码**（板子跑不动转码），放 `Videos/` 替换。基线模板：
+   ```sh
+   ffmpeg -i 输入.mp4 -vf scale=640:360 -r 20 -c:v libx264 -profile:v baseline -level 3.0 \
+     -preset veryfast -crf 28 -g 20 -c:a aac -b:a 64k 输出.mp4
+   ```
+   若觉得 20fps 观感顿挫，用降分辨率换帧率：`scale=512:288 -r 30 -g 30 -crf 30`。
+3. **MJPEG 备选**（帧内编码、无帧间预测，单帧解码最便宜；缺点是体积大，短演示片段适用）：
+   ```sh
+   ffmpeg -i 输入.mp4 -vf scale=512:288 -r 20 -c:v mjpeg -q:v 8 \
+     -c:a pcm_s16le -ar 22050 -ac 1 输出.avi
+   ```
+   `-q:v` 质量 2–31 越小越清晰；输出 `.avi` 恰好被 `findVideoPath` 支持。优先级：先试模板 2，仍不流畅再换 3。
+4. **替换文件名规则**：数据库按主文件名找文件，覆盖同名 `Videos/xxx.mp4` 即生效，无需动 `media_player.db`。
+5. **判断瓶颈**：播放时板端 `top`——CPU 满载 = 素材规格超上限（继续降规格）；CPU 不忙仍卡 = 渲染/代码问题再查。
+
 ---
 
 ## 8. 给后续改代码的约束
@@ -198,16 +239,54 @@ cd /root
 2. 倒车影像只改 `camera.*` / `v4l2capture.*`；本地视频播放只改 `player.*`。
 3. 采集必须在 `V4L2Capture` 线程；离开倒车页必须停流、close。
 4. 子页面风格尚未统一，第一轮不要大改 `weather.ui` / `Audio.ui` 等，除非需求明确要改。
-5. IMX6ULL CPU 弱：预览建议 640×480；若加录像，优先 MJPEG 封装，不要软件 H.264。
-6. 含界面的类不要 `moveToThread`（历史代码里 Weather/Player/Audio 有此问题）。
+5. IMX6ULL CPU 弱：预览建议 640×480；若加录像，优先 MJPEG 封装，不要软件 H.264。本地视频同样受软解上限约束（见 §4.3 性能上限与 §7.1）。
+6. 含界面的类不要 `moveToThread`（Player 已修复；历史代码里 Weather/Audio 仍有此问题）。
 7. API Key（天气、天地图）目前写在源码中。
+8. **SDK 的 Qt 版本偏旧**：`qHypot`（Qt5.10+）、部分 `QNetworkReply::NetworkError` 新枚举名都不存在。写数学/枚举时优先用老 API（`qSqrt(dx*dx+dy*dy)`、数字错误码区间），编译报错即换等价写法。
 
 ---
 
 ## 9. 已知状态 / 未完成
 
-- 主页仪表盘 UI 已改；子页 UI 未改。
+- 主页 UI 已改为深色卡片风（2026-10-12，见 §10）；子页 UI 未改。
 - 倒车影像：预览 + 拍照已写；**录像未做**。
 - 车速/电量/里程为写死演示值。
 - `README.md` 可能过时或含冲突标记，以本文件为准。
 - 工程曾引用 `mapview.cpp`，当前地图实现是 `map.cpp` 天地图静态图，无 `mapview` 源文件。
+
+---
+
+## 10. 改动记录（供交接，新条目放最上）
+
+### 2026-10-12 首页 UI 深色卡片化（`mainwindow.ui` `speedgauge.cpp`）
+- 首页整体改为深色车载风：深蓝紫渐变背景；顶栏 = 标题「智能车载终端」+ 状态点 + 右对齐日期/大号时钟。
+- 主体两栏：左列 = 仪表盘卡（`speedGauge`）+ 速度/电量/里程三张数据条；右列 = **2×4 功能卡网格**（音乐/视频/天气/地图/环境/设置/倒车影像 7 个入口 + 系统状态卡，状态卡内含 GPS/网络占位行）。
+- 功能卡统一深色卡样式，底部 3px 彩色描边区分模块（`:pressed` 变亮作按压反馈），样式集中在 `MainWindow.styleSheet`，不再逐按钮内联。
+- 所有 objectName 保持不变（`pushButton`~`pushButton_5`、`btnSettings`、`btnCamera`、`datelable`、`timelable`、`speedGauge` 等），`mainwindow.cpp` **无需改动**。
+- `speedgauge.cpp` 配色适配深色卡：底盘环 `#2d3e5c`、中央数字 `#f1f5f9`、单位/标题 `#94a3b8`；若以后换回浅色背景需同步改回。
+- 待办：板端编译看整体效果；主页照片里日期是 1970 年 = 板子 RTC 未设置（`date -s` + `hwclock -w` 可修，与 UI 无关）。
+
+### 2026-10-12 仪表盘三处修正（`speedgauge.cpp` `mainwindow.*`）
+- **拖动 99↔100 整表缩放跳动**：根因是 `labelSpeed` 文本变宽 → statsRow 最小宽度变化 → 左列被重新分配 → `SpeedGauge::paintEvent` 里 `side=qMin(w,h)` 跟着变，整个表盘缩放跳帧。修法：构造时用 `fontMetrics().horizontalAdvance("180 km/h")` 给 `labelSpeed` 预留最宽最小宽度。**教训：会动态变文本的标签要预留宽度，否则连锁改布局。**
+- 中心轮毂 r11→r7（红心 2.5），速度大数字 / km/h / "拖动圆环调节"提示整体下移到圆心下方（y=10/56/74），不再被指针和轮毂压住。
+- 首页"网络：已连接"原来是 .ui 写死的假状态。新增 `MainWindow::checkNetwork()`：GET `http://www.baidu.com`（UA 用 `SmartCarIVI/1.0`），**收到任何 HTTP 响应（含 403）即算已连接**，5s 超时/无响应算未连接；进入时探测一次 + 每 30s 复检；未连接时该行文字变红，初始"检测中…"。
+
+### 2026-10-12 仪表盘可拖动 + 电量 100%（`speedgauge.*` `mainwindow.*`）
+- `SpeedGauge` 重绘为运动仪表风：外细圈、270° 底环 + 85%–100% 红色警示区、青→紫渐变进度弧、每 20 km/h 主刻度带数字（环外）+ 每 10 细刻度（环内）、菱形红指针 + 轮毂、中央 46px 大数字。
+- **交互**：按住圆环区拖动即改时速（角度→速度映射在 `setSpeedFromPos`，底部 90° 缺口取最近端点，中心数字区不响应）；新增 `speedChanged(int)` 信号，`mainwindow.cpp` 里连到 `labelSpeed` 同步"当前速度"卡。演示时可直接手拖当"车速调节旋钮"。
+- 半径分配（280 逻辑坐标系）：数字刻度 115 / 外圈 124 / 环 100±6 / 刻度线 72–88 / 指针 70，改样式时注意别互相压字。
+- 电量卡固定文案改为 `100%`（仍是演示值，未接真实电池数据源）。
+
+### 2026-10-12 视频播放器（`player.*` `videowidget.*` `playercontrols.cpp` `mainwindow.*`）
+- 删除 `player->moveToThread(t2)` 及 t2 全部代码：界面控件不能离开 GUI 线程（原因见 §8-6）。
+- 废弃 `QVideoWidget::setFullScreen` 与 `videoAvailableChanged`（内有重复 connect，是"全屏退不回来"根因之一），改为 `toggleFullScreen`/`setFullScreenUi` 布局级全屏，细节见 §4.3。
+- seek/音量改 `sliderReleased` 松手提交，解决拖动卡顿。
+- 全屏改为真铺满（边距清零+隐藏进度条行），单击视频浮出退出按钮、3s 自动隐藏。
+- `open()` 过滤器由 MIME 改为后缀名，修复板端"Open 添加不了文件"。
+- 待办：板端复测全屏三入口与退出后布局恢复；视频素材需按 §7.1 转码。
+
+### 2026-10-12 地图（`map.*`）
+- 修复一直停在 loading：补 `QNetworkReply` 错误处理、10s 超时、https→http 自动降级、PNG 磁盘缓存兜底。
+- 天地图 403 根因：Qt5 默认 UA 是浏览器样式被 WAF 拦，改发 `SmartCarIVI/1.0` 后 200（详见记忆文件 `smartcar-tianditu-ua.md`）。
+- 平移/缩放/回定位交互；`markers` 与 `center` 分离，定位针固定在定位点不再漂到屏幕中心。
+- 注意：SDK 的 Qt 头文件缺部分 `QNetworkReply::NetworkError` 新枚举名，错误码判断用数字区间（201–299 内容类、401+ 服务器类）。

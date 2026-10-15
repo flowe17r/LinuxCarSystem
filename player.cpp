@@ -40,9 +40,6 @@ Player::Player(QWidget *parent)
     m_player = new QMediaPlayer(this);
     // 设置音频角色为视频角色（让系统按视频场景优化音频）
     m_player->setAudioRole(QAudio::VideoRole);
-    qInfo() << "Supported audio roles:";
-    for (QAudio::Role role : m_player->supportedAudioRoles())
-        qInfo() << "    " << role;
 
     // 创建播放列表并关联到播放器
     m_playlist = new QMediaPlaylist();
@@ -51,6 +48,16 @@ Player::Player(QWidget *parent)
     // ------ 3. 创建视频显示控件 ------
     m_videoWidget = new VideoWidget(this);
     m_player->setVideoOutput(m_videoWidget);
+
+    // 全屏浮层退出按钮：作为视频控件的子控件叠在画面上，默认隐藏，单击视频唤出
+    m_exitFullButton = new QPushButton(tr("退出全屏"), m_videoWidget);
+    m_exitFullButton->setStyleSheet(
+        "QPushButton { background-color: rgba(40, 40, 40, 200); color: white;"
+        " border: 1px solid white; padding: 8px 16px; font-size: 16px; }"
+        "QPushButton:pressed { background-color: rgba(90, 90, 90, 220); }"
+    );
+    m_exitFullButton->adjustSize();
+    m_exitFullButton->hide();
 
     // ------ 4. 创建播放列表模型和视图 ------
     m_playlistModel = new PlaylistModel(this);
@@ -93,7 +100,6 @@ Player::Player(QWidget *parent)
     // 初始状态同步
     controls->setState(m_player->state());
     controls->setVolume(m_player->volume());
-    controls->setMuted(controls->isMuted());
 
     // ------ 8. 布局：视频 + 列表（水平），进度条，控制按钮行 ------
     QBoxLayout *displayLayout = new QHBoxLayout;
@@ -177,12 +183,24 @@ Player::Player(QWidget *parent)
     connect(m_playlist, &QMediaPlaylist::currentIndexChanged, this, &Player::playlistPositionChanged);
     connect(m_player, &QMediaPlayer::mediaStatusChanged, this, &Player::statusChanged);
     connect(m_player, &QMediaPlayer::bufferStatusChanged, this, &Player::bufferingProgress);
-    connect(m_player, &QMediaPlayer::videoAvailableChanged, this, &Player::videoAvailableChanged);
     connect(m_player, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error), this, &Player::displayErrorMessage);
     connect(m_playlistView, &QAbstractItemView::activated, this, &Player::jump);
-    connect(m_slider, &QSlider::sliderMoved, this, &Player::seek);
+    // 拖动过程中不 seek：IMX6ULL 纯软解，连续 seek 会卡死播放；松手才跳转一次
+    connect(m_slider, &QSlider::sliderReleased, this, [this]() { seek(m_slider->value()); });
     connect(openButton, &QPushButton::clicked, this, &Player::open);
     connect(backButton, &QPushButton::clicked, this, &Player::backout);
+
+    // 全屏：自管布局级切换，不用 QVideoWidget::setFullScreen（顶层窗口在 linuxfb 上回不来）
+    connect(m_fullScreenButton, &QPushButton::clicked, this, &Player::toggleFullScreen);
+    connect(m_videoWidget, &VideoWidget::doubleClicked, this, &Player::toggleFullScreen);
+    // 全屏下单击视频 → 浮出退出按钮
+    connect(m_videoWidget, &VideoWidget::clicked, this, [this]() {
+        if (m_isFullScreen)
+            showFullOverlay();
+    });
+    connect(m_exitFullButton, &QPushButton::clicked, this, [this]() {
+        setFullScreenUi(false);
+    });
 
     // 播放控制面板的信号 → 播放器操作
     connect(controls, &PlayerControls::play, m_player, &QMediaPlayer::play);
@@ -235,19 +253,25 @@ void Player::open()
     QFileDialog fileDialog(this);
     fileDialog.setAcceptMode(QFileDialog::AcceptOpen);
     fileDialog.setWindowTitle(tr("Open Files"));
+    fileDialog.setFileMode(QFileDialog::ExistingFiles);
 
-    // 获取播放器支持的 MIME 类型，用于过滤文件
-    QStringList supportedMimeTypes = m_player->supportedMimeTypes();
-    if (!supportedMimeTypes.isEmpty()) {
-        supportedMimeTypes.append("audio/x-m3u"); // MP3 播放列表
-        fileDialog.setMimeTypeFilters(supportedMimeTypes);
-    }
+    // 用后缀名过滤，不用 supportedMimeTypes()：
+    // SDK 的 ffmpeg 插件上报的 MIME 表经常不全，用它做过滤器会把 mp4 隐藏掉
+    fileDialog.setNameFilters(QStringList()
+        << tr("视频 (*.mp4 *.mkv *.avi *.mov *.ts)")
+        << tr("所有文件 (*)"));
+    fileDialog.selectNameFilter(tr("视频 (*.mp4 *.mkv *.avi *.mov *.ts)"));
 
-    // 默认打开程序目录下的 Videos 文件夹
-    fileDialog.setDirectory(QCoreApplication::applicationDirPath() + "/Videos");
+    // 默认目录：程序旁的 Videos，不存在则退回用户主目录
+    QString startDir = QCoreApplication::applicationDirPath() + "/Videos";
+    if (!QFileInfo(startDir).isDir())
+        startDir = QDir::homePath();
+    fileDialog.setDirectory(startDir);
 
     if (fileDialog.exec() == QDialog::Accepted) {
         QList<QUrl> selectedUrls = fileDialog.selectedUrls();
+        if (selectedUrls.isEmpty())
+            qDebug() << "Open 对话框未选中任何文件，目录：" << startDir;
 
         QSqlQuery insertQuery;
         for (const QUrl& url : selectedUrls) {
@@ -270,10 +294,12 @@ void Player::open()
 }
 
 /**
- * @brief 返回上一级界面（停止播放、重置进度，发送 back 信号）
+ * @brief 返回上一级界面（退出全屏、停止播放、重置进度，发送 back 信号）
  */
 void Player::backout()
 {
+    if (m_isFullScreen)
+        setFullScreenUi(false);
     if (m_player->state() == QMediaPlayer::PlayingState) {
         m_player->pause();
     }
@@ -512,21 +538,77 @@ void Player::bufferingProgress(int progress)
         setStatusInfo(tr("Buffering %1%").arg(progress));
 }
 
+// ==================== 全屏 ====================
+
 /**
- * @brief 视频可用性变化时连接/断开全屏按钮与视频控件
+ * @brief 全屏切换：按钮、双击视频、ESC 都收敛到这里
  */
-void Player::videoAvailableChanged(bool available)
+void Player::toggleFullScreen()
 {
-    if (!available) {
-        disconnect(m_fullScreenButton, &QPushButton::clicked, m_videoWidget, &QVideoWidget::setFullScreen);
-        disconnect(m_videoWidget, &QVideoWidget::fullScreenChanged, m_fullScreenButton, &QPushButton::setChecked);
-        m_videoWidget->setFullScreen(false);
-    } else {
-        connect(m_fullScreenButton, &QPushButton::clicked, m_videoWidget, &QVideoWidget::setFullScreen);
-        connect(m_videoWidget, &QVideoWidget::fullScreenChanged, m_fullScreenButton, &QPushButton::setChecked);
-        if (m_fullScreenButton->isChecked())
-            m_videoWidget->setFullScreen(true);
+    setFullScreenUi(!m_isFullScreen);
+}
+
+/**
+ * @brief 布局级全屏：隐藏列表、控制行和进度条并清零布局边距，视频铺满整屏；
+ *        退出入口为：单击视频浮出的按钮、双击视频、ESC，保证 linuxfb 下一定能退出
+ */
+void Player::setFullScreenUi(bool fullScreen)
+{
+    m_isFullScreen = fullScreen;
+    m_fullScreenButton->setChecked(fullScreen);
+    m_fullScreenButton->setText(fullScreen ? tr("退出全屏") : tr("FullScreen"));
+    if (!fullScreen && !m_savedMargins.isNull()) {
+        layout()->setContentsMargins(m_savedMargins);
+        m_savedMargins = QMargins();
     }
+    m_fullScreenButton->setVisible(!fullScreen);
+    m_playlistView->setVisible(!fullScreen);
+    openButton->setVisible(!fullScreen);
+    backButton->setVisible(!fullScreen);
+    controls->setVisible(!fullScreen);
+    m_slider->setVisible(!fullScreen);
+    m_labelDuration->setVisible(!fullScreen);
+
+    if (!fullScreen) {
+        m_exitFullButton->hide();
+        emit fullScreenChanged(fullScreen);
+        return;
+    }
+
+    // 清零外边距并压缩间距，让视频真正铺满整屏
+    if (layout()) {
+        m_savedMargins = layout()->contentsMargins();
+        layout()->setContentsMargins(0, 0, 0, 0);
+        layout()->setSpacing(0);
+    }
+    emit fullScreenChanged(fullScreen);
+}
+
+/**
+ * @brief 全屏下单击视频区域：在右上角浮出"退出全屏"按钮，3 秒后自动收起
+ */
+void Player::showFullOverlay()
+{
+    m_exitFullButton->adjustSize();
+    m_exitFullButton->move(m_videoWidget->width() - m_exitFullButton->width() - 16, 16);
+    m_exitFullButton->show();
+    m_exitFullButton->raise();
+
+    // 重新点击时重置倒计时（旧定时器因 context 失效自动作废）
+    QTimer::singleShot(3000, m_exitFullButton, [this]() {
+        if (m_isFullScreen)
+            m_exitFullButton->hide();
+    });
+}
+
+void Player::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape && m_isFullScreen) {
+        setFullScreenUi(false);
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 // ==================== 信息显示工具函数 ====================

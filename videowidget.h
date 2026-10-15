@@ -22,6 +22,12 @@ protected:
     // 用于处理鼠标按下事件
     void mousePressEvent(QMouseEvent *event) override;
 
+signals:
+    // 双击视频区域：由 Player 决定进入/退出全屏，不在这里动 QVideoWidget 的顶层窗口全屏
+    void doubleClicked();
+    // 全屏时单击视频区域唤出退出按钮
+    void clicked();
+
 };
 
 #endif // VIDEOWIDGET_H

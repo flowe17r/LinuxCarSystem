@@ -86,7 +86,7 @@ bool V4L2Capture::openDevice()
     QStringList candidates;
     if (!m_device.isEmpty())
         candidates << m_device;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 2; ++i) {
         const QString path = QStringLiteral("/dev/video%1").arg(i);
         if (!candidates.contains(path))
             candidates << path;

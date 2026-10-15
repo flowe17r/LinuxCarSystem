@@ -60,7 +60,8 @@ PlayerControls::PlayerControls(QWidget *parent)
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setStyleSheet("QToolButton { background-color: rgba(0, 0, 0, 0); }");
 
-    connect(m_volumeSlider, &QSlider::valueChanged, this, &PlayerControls::onVolumeSliderValueChanged);
+    // 松手才提交音量：逐 tick 调 setVolume 在板端是负担，且会与 volumeChanged 形成回环
+    connect(m_volumeSlider, &QSlider::sliderReleased, this, &PlayerControls::onVolumeSliderValueChanged);
 
     // 播放速率组合框
     m_rateBox = new QComboBox(this);

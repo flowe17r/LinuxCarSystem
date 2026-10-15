@@ -14,6 +14,8 @@
 #include <QDebug>
 #include <QVariant>
 #include <QList>
+#include <QMargins>
+#include <QUrl>
 
 QT_BEGIN_NAMESPACE
 class QAbstractItemView;
@@ -24,12 +26,13 @@ class QPushButton;
 class QSlider;
 class QStatusBar;
 class QVideoProbe;
-class QVideoWidget;
 class QAudioProbe;
 QT_END_NAMESPACE
 
 class PlaylistModel;
+class VideoWidget;
 class HistogramWidget;
+class QKeyEvent;
 
 class Player : public QWidget
 {
@@ -81,17 +84,25 @@ private slots:
     void statusChanged(QMediaPlayer::MediaStatus status);
     // 当媒体播放器的缓冲进度发生改变时被调用，传入新的缓冲进度值（以百分比表示）
     void bufferingProgress(int progress);
-    // 当视频是否可用的状态发生改变时被调用，传入一个布尔值表示视频是否可用
-    void videoAvailableChanged(bool available);
 
-    // 槽函数，用于显示媒体播放器的错误信息
+    // 全屏切换（按钮、双击视频、ESC 都走这里）
+    void toggleFullScreen();
+
+    // 用于处理媒体播放器的错误信息，显示到状态栏
     void displayErrorMessage();
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     // 根据传入的信息设置媒体曲目相关的信息显示
     void setTrackInfo(const QString &info);
     // 根据传入的信息设置窗口底部状态信息的显示
     void setStatusInfo(const QString &info);
+    // 布局级全屏：隐藏列表与多余控件，视频占满区域，保留进度条和退出入口
+    void setFullScreenUi(bool fullScreen);
+    // 全屏下单击视频：浮出"退出全屏"按钮，3 秒后自动隐藏
+    void showFullOverlay();
     // 根据媒体播放器的媒体状态处理鼠标光标显示，如在加载等状态时显示忙碌光标
     void handleCursor(QMediaPlayer::MediaStatus status);
     // 根据当前播放信息更新播放时长相关的信息显示
@@ -102,7 +113,7 @@ private:
     // 播放列表对象，用于管理媒体播放的顺序等
     QMediaPlaylist *m_playlist = nullptr;
     // 视频显示部件，用于在窗口中显示视频内容
-    QVideoWidget *m_videoWidget = nullptr;
+    VideoWidget *m_videoWidget = nullptr;
     // 用于显示多媒体文件的封面图片的标签部件
     QLabel *m_coverLabel = nullptr;
     // 播放进度条部件，用于显示和控制媒体播放的进度
@@ -111,6 +122,8 @@ private:
     QLabel *m_labelDuration = nullptr;
     // 全屏按钮部件，用于切换窗口的全屏模式
     QPushButton *m_fullScreenButton = nullptr;
+    // 全屏浮层的退出按钮（父控件是视频区，默认隐藏，单击视频唤出）
+    QPushButton *m_exitFullButton = nullptr;
     // 用于显示播放状态相关信息的标签部件
     QLabel *m_statusLabel = nullptr;
     // 窗口底部状态信息栏部件，用于显示各种状态信息
@@ -124,7 +137,11 @@ private:
     // 用于存储窗口底部状态信息的字符串，如播放状态、缓冲状态等
     QString m_statusInfo;
     // 用于存储媒体文件的总时长（以毫秒为单位）
-    qint64 m_duration;
+    qint64 m_duration = 0;
+    // 当前是否处于（布局级）全屏
+    bool m_isFullScreen = false;
+    // 进入全屏前保存的布局边距，退出时恢复（全屏时清零让视频真正铺满）
+    QMargins m_savedMargins;
 
     QSqlDatabase m_database; // 数据库对象
     QList<QString> m_videoListFromDB; // 用于存储从数据库查询到的视频名称列表

@@ -13,6 +13,7 @@
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
+class QNetworkAccessManager;
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow
@@ -29,11 +30,16 @@ signals:
     void hardware_starting();
     void map_starting();
 
+private slots:
+    // 真实探测网络（HTTP HEAD 超时判定），刷新首页"网络"一行
+    void checkNetwork();
+
 private:
     void openModule(QWidget *page);
     void backToHome();
 
     Ui::MainWindow *ui;
+    QNetworkAccessManager *m_netMgr;
     Player *player;
     Audio *audio;
     Weather *weather;
@@ -42,7 +48,6 @@ private:
     Camera *camera;
     SettingsPage *settingsPage;
     QThread *t1;
-    QThread *t2;
     QThread *t3;
 };
 
